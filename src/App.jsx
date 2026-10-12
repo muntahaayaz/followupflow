@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
 const STORAGE_KEY = "followupflow-leads";
-
 const STATUSES = ["New", "Contacted", "Interested", "Converted"];
 
 const MESSAGE_TEMPLATES = {
@@ -10,152 +10,124 @@ const MESSAGE_TEMPLATES = {
     label: "First follow-up",
     subject: "Following up on our conversation",
     body: (name, business) =>
-      `Hi ${name},
-
-I hope you're doing well. I wanted to follow up and introduce how we might be able to help${
-        business ? ` ${business}` : ""
-      }.
-
-Would you be available for a quick conversation? I'd be happy to answer any questions.
-
-Best regards`,
+      `Hi ${name},\n\nI hope you're doing well. I wanted to follow up on our recent conversation${business ? ` about ${business}` : ""}. Please let me know if you have any questions or if there is anything I can help you with.\n\nLooking forward to hearing from you!`,
   },
   interested: {
     label: "Interested customer",
     subject: "Checking in",
     body: (name, business) =>
-      `Hi ${name},
-
-Thank you for your interest${
-        business ? ` in working with ${business}` : ""
-      }. I wanted to check whether you have any questions or need any additional information.
-
-I'd be happy to help you with the next steps.
-
-Best regards`,
+      `Hi ${name},\n\nThank you for your interest${business ? ` in ${business}` : ""}. I wanted to check in and see if you'd like any additional information. I'm happy to answer your questions and help you decide on the next steps.\n\nHope to hear from you soon!`,
   },
   quote: {
     label: "Quote or proposal",
     subject: "Following up on your quote",
     body: (name, business) =>
-      `Hi ${name},
-
-I hope you're doing well. I'm following up on the quote or proposal we discussed${
-        business ? ` regarding ${business}` : ""
-      }.
-
-Have you had a chance to review it? Please let me know if you'd like any clarification.
-
-Thank you for your time.
-
-Best regards`,
+      `Hi ${name},\n\nI'm following up on the quote or proposal I shared${business ? ` regarding ${business}` : ""}. Have you had a chance to review it? Please let me know if you'd like any changes or have questions.\n\nThank you for your time!`,
   },
   reminder: {
     label: "Polite reminder",
     subject: "A quick follow-up",
     body: (name, business) =>
-      `Hi ${name},
-
-I wanted to send a quick, friendly reminder about our previous conversation${
-        business ? ` concerning ${business}` : ""
-      }.
-
-Whenever you have a moment, please let me know if there are any updates. No rush, and thank you for your time.
-
-Best regards`,
+      `Hi ${name},\n\nI hope all is well. This is a friendly follow-up${business ? ` about ${business}` : ""}. When you have a moment, please let me know if there are any updates or if I can provide anything else.\n\nThanks, and have a great day!`,
   },
   closing: {
     label: "Closing the conversation",
     subject: "Checking in one last time",
     body: (name, business) =>
-      `Hi ${name},
-
-I'm checking in one last time regarding our previous conversation${
-        business ? ` about ${business}` : ""
-      }.
-
-I understand you may be busy or your priorities may have changed. If you'd like to reconnect in the future, I'd be happy to hear from you.
-
-Thank you, and I wish you all the best.
-
-Best regards`,
+      `Hi ${name},\n\nI'm checking in one last time${business ? ` about ${business}` : ""}. I understand the timing may not be right, so there's no pressure. If you'd like to reconnect in the future, I'll be happy to help.\n\nWishing you all the best!`,
   },
 };
 
 function getToday() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
 function getFollowUpState(date) {
   if (!date) return "Not scheduled";
-
   const today = getToday();
-
   if (date < today) return "Overdue";
   if (date === today) return "Due today";
-
   return "Upcoming";
 }
 
 function formatDate(date) {
-  if (!date) return "No date set";
-
+  if (!date) return "Not scheduled";
   const parsed = new Date(`${date}T12:00:00`);
-
-  if (Number.isNaN(parsed.getTime())) return "Invalid date";
+  if (Number.isNaN(parsed.getTime())) return date;
 
   return parsed.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
     year: "numeric",
+    month: "short",
+    day: "numeric",
   });
 }
 
 function loadLeads() {
   try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-
+    const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return [];
 
     const parsed = JSON.parse(saved);
-
     if (!Array.isArray(parsed)) return [];
 
-    // Ignore invalid records rather than crashing the whole dashboard.
-    return parsed.filter(
-      (lead) =>
-        lead &&
-        typeof lead === "object" &&
-        lead.id != null &&
-        typeof lead.name === "string"
-    );
-  } catch (error) {
-    console.error("Could not load saved leads:", error);
+    return parsed
+      .filter(
+        (lead) =>
+          lead && lead.id != null && typeof lead.name === "string"
+      )
+      .map((lead) => ({
+        id: lead.id,
+        name: lead.name || "",
+        email: lead.email || "",
+        business: lead.business || "",
+        phone: lead.phone || "",
+        notes: lead.notes || "",
+        dealValue: Number(lead.dealValue) || 0,
+        activity: Array.isArray(lead.activity) ? lead.activity : [],
+        status: STATUSES.includes(lead.status) ? lead.status : "New",
+        followUpDate:
+          typeof lead.followUpDate === "string"
+            ? lead.followUpDate
+            : "",
+        createdAt: lead.createdAt || new Date().toISOString(),
+      }));
+  } catch {
     return [];
   }
 }
 
 function createLeadId() {
-  if (globalThis.crypto?.randomUUID) {
-    return globalThis.crypto.randomUUID();
-  }
-
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ||
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
 }
 
 function getStatusClass(status) {
-  return String(status || "New").toLowerCase().replace(/\s+/g, "-");
+  return `status status-${String(status || "new").toLowerCase()}`;
 }
 
-function getFollowUpClass(status) {
-  return String(status || "Not scheduled")
+function getFollowUpClass(state) {
+  return `followup-badge followup-${String(state)
     .toLowerCase()
-    .replace(/\s+/g, "-");
+    .replaceAll(" ", "-")}`;
+}
+
+function getWeekEnd() {
+  const date = new Date(`${getToday()}T12:00:00`);
+  const day = date.getDay();
+  const daysUntilSunday = day === 0 ? 0 : 7 - day;
+  date.setDate(date.getDate() + daysUntilSunday);
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const dayOfMonth = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${dayOfMonth}`;
 }
 
 export default function App() {
@@ -164,10 +136,28 @@ export default function App() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [business, setBusiness] = useState("");
+  const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
+  const [dealValue, setDealValue] = useState("");
   const [status, setStatus] = useState("New");
   const [followUpDate, setFollowUpDate] = useState("");
 
   const [activeView, setActiveView] = useState("Dashboard");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+
+  const [editingLeadId, setEditingLeadId] = useState(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    business: "",
+    phone: "",
+    notes: "",
+    dealValue: "",
+    status: "New",
+    followUpDate: "",
+  });
+
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [messageType, setMessageType] = useState("introduction");
   const [generatedMessage, setGeneratedMessage] = useState("");
@@ -176,24 +166,23 @@ export default function App() {
   const [storageWarning, setStorageWarning] = useState("");
   const [notice, setNotice] = useState("");
 
-  // Save changes safely without crashing if browser storage is unavailable.
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(leads));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(leads));
       setStorageWarning("");
-    } catch (error) {
-      console.error("Could not save leads:", error);
+    } catch {
       setStorageWarning(
-        "Your browser could not save changes. Do not clear this page or browser data; make a backup of your leads."
+        "Your browser could not save changes. Check browser storage settings or available space."
       );
     }
   }, [leads]);
 
-  // Clear message selection if its customer is deleted.
   useEffect(() => {
     if (
       selectedLeadId &&
-      !leads.some((lead) => String(lead.id) === selectedLeadId)
+      !leads.some(
+        (lead) => String(lead.id) === String(selectedLeadId)
+      )
     ) {
       setSelectedLeadId("");
       setGeneratedMessage("");
@@ -212,12 +201,11 @@ export default function App() {
       return;
     }
 
-    // The email field is optional, but validate it if supplied.
     if (
       cleanEmail &&
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
     ) {
-      setNotice("Please enter a valid email address.");
+      setNotice("Please enter a valid email address or leave it blank.");
       return;
     }
 
@@ -226,45 +214,74 @@ export default function App() {
       name: cleanName,
       email: cleanEmail,
       business: business.trim(),
+      phone: phone.trim(),
+      notes: notes.trim(),
+      dealValue: Number(dealValue) || 0,
+      activity: [{
+        id: createLeadId(),
+        message: "Lead created",
+        at: new Date().toISOString(),
+      }],
       status,
       followUpDate,
       createdAt: new Date().toISOString(),
     };
 
     setLeads((current) => [newLead, ...current]);
-
     setName("");
     setEmail("");
     setBusiness("");
+    setPhone("");
+    setNotes("");
+    setDealValue("");
     setStatus("New");
     setFollowUpDate("");
-    setNotice("Lead added successfully.");
+    setNotice(`${cleanName} was added successfully.`);
   }
 
   function updateLead(id, changes) {
     setLeads((current) =>
-      current.map((lead) =>
-        String(lead.id) === String(id)
-          ? { ...lead, ...changes }
-          : lead
-      )
+      current.map((lead) => {
+        if (String(lead.id) !== String(id)) return lead;
+
+        const labels = {
+          status: "Status updated",
+          followUpDate: "Follow-up date updated",
+          name: "Customer name updated",
+          email: "Email updated",
+          business: "Business updated",
+          phone: "Phone updated",
+          notes: "Notes updated",
+          dealValue: "Deal value updated",
+          lastFollowUpCompletedAt: "Follow-up marked done",
+        };
+
+        const changed = Object.keys(changes).filter(
+          (key) => lead[key] !== changes[key]
+        );
+        const entries = changed.map((key) => ({
+          id: createLeadId(),
+          message: labels[key] || (key + " updated"),
+          at: new Date().toISOString(),
+        }));
+
+        return {
+          ...lead,
+          ...changes,
+          activity: [...entries, ...(lead.activity || [])].slice(0, 30),
+        };
+      })
     );
   }
 
-  function handleStatusChange(lead, newStatus) {
-    if (lead.status === newStatus) return;
-
-    updateLead(lead.id, { status: newStatus });
-    setNotice(`${lead.name}'s status updated to ${newStatus}.`);
+  function handleStatusChange(lead, nextStatus) {
+    updateLead(lead.id, { status: nextStatus });
+    setNotice(`${lead.name}'s status was updated.`);
   }
 
-  function handleFollowUpChange(lead, newDate) {
-    updateLead(lead.id, { followUpDate: newDate });
-    setNotice(
-      newDate
-        ? `Follow-up date updated for ${lead.name}.`
-        : `Follow-up date removed for ${lead.name}.`
-    );
+  function handleFollowUpChange(lead, nextDate) {
+    updateLead(lead.id, { followUpDate: nextDate });
+    setNotice(`Follow-up date updated for ${lead.name}.`);
   }
 
   function deleteLead(id) {
@@ -274,64 +291,98 @@ export default function App() {
 
     if (!lead) return;
 
-    const confirmed = window.confirm(
-      `Delete ${lead.name} from your leads? This cannot be undone.`
-    );
+    if (window.confirm(`Delete ${lead.name}? This cannot be undone.`)) {
+      setLeads((current) =>
+        current.filter((item) => String(item.id) !== String(id))
+      );
+      setNotice(`${lead.name} was deleted.`);
+    }
+  }
 
-    if (!confirmed) return;
+  function startEditing(lead) {
+    setEditingLeadId(lead.id);
 
-    setLeads((current) =>
-      current.filter((item) => String(item.id) !== String(id))
-    );
+    setEditForm({
+      name: lead.name || "",
+      email: lead.email || "",
+      business: lead.business || "",
+      phone: lead.phone || "",
+      notes: lead.notes || "",
+      dealValue: String(lead.dealValue || ""),
+      status: lead.status || "New",
+      followUpDate: lead.followUpDate || "",
+    });
 
-    setNotice(`${lead.name} was removed from your leads.`);
+    setNotice("");
+  }
+
+  function saveEdit(event) {
+    event.preventDefault();
+
+    const cleanName = editForm.name.trim();
+    const cleanEmail = editForm.email.trim();
+
+    if (!cleanName) {
+      setNotice("Customer name cannot be empty.");
+      return;
+    }
+
+    if (
+      cleanEmail &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
+    ) {
+      setNotice("Please enter a valid email address or leave it blank.");
+      return;
+    }
+
+    updateLead(editingLeadId, {
+      name: cleanName,
+      email: cleanEmail,
+      business: editForm.business.trim(),
+      phone: editForm.phone.trim(),
+      notes: editForm.notes.trim(),
+      dealValue: Number(editForm.dealValue) || 0,
+      status: editForm.status,
+      followUpDate: editForm.followUpDate,
+    });
+
+    setEditingLeadId(null);
+    setNotice(`${cleanName}'s details were saved.`);
   }
 
   const selectedLead = leads.find(
-    (lead) => String(lead.id) === selectedLeadId
+    (lead) => String(lead.id) === String(selectedLeadId)
   );
 
   function generateMessage() {
     if (!selectedLead) {
-      setCopyStatus("Please select a customer first.");
+      setNotice("Please select a customer first.");
       return;
     }
 
     const template = MESSAGE_TEMPLATES[messageType];
 
-    if (!template) {
-      setCopyStatus("Please choose a valid message purpose.");
-      return;
-    }
-
-    const message = template.body(
-      selectedLead.name,
-      selectedLead.business || ""
+    setGeneratedMessage(
+      `Subject: ${template.subject}\n\n${template.body(
+        selectedLead.name,
+        selectedLead.business
+      )}`
     );
 
-    setGeneratedMessage(`${template.subject}\n\n${message}`);
     setCopyStatus("");
   }
 
   async function copyMessage() {
-    if (!generatedMessage.trim()) {
-      setCopyStatus("Generate a message first.");
-      return;
-    }
+    if (!generatedMessage.trim()) return;
 
     try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error("Clipboard access is unavailable.");
-      }
-
       await navigator.clipboard.writeText(generatedMessage);
-
       setCopyStatus(
-        "Message copied! You can paste it into your email or chat."
+        "Message copied. You can now paste it into your email or chat."
       );
     } catch {
       setCopyStatus(
-        "Automatic copying was blocked. Select the message and press Ctrl+C."
+        "Copy was blocked by your browser. Select the message text and copy it manually."
       );
     }
   }
@@ -344,13 +395,17 @@ export default function App() {
     (lead) => lead.status === "Converted"
   ).length;
 
-  const scheduledLeads = leads
-    .filter(
-      (lead) =>
-        typeof lead.followUpDate === "string" &&
-        /^\d{4}-\d{2}-\d{2}$/.test(lead.followUpDate)
-    )
-    .sort((a, b) => a.followUpDate.localeCompare(b.followUpDate));
+  const scheduledLeads = useMemo(
+    () =>
+      leads
+        .filter((lead) =>
+          /^\d{4}-\d{2}-\d{2}$/.test(lead.followUpDate || "")
+        )
+        .sort((a, b) =>
+          a.followUpDate.localeCompare(b.followUpDate)
+        ),
+    [leads]
+  );
 
   const overdueCount = scheduledLeads.filter(
     (lead) => getFollowUpState(lead.followUpDate) === "Overdue"
@@ -360,8 +415,277 @@ export default function App() {
     (lead) => getFollowUpState(lead.followUpDate) === "Due today"
   ).length;
 
-  const visibleLeads =
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const baseVisibleLeads =
     activeView === "Follow-ups" ? scheduledLeads : leads;
+
+  const visibleLeads = baseVisibleLeads.filter((lead) => {
+    const matchesSearch = [
+      lead.name,
+      lead.email,
+      lead.business,
+    ].some((value) =>
+      String(value || "").toLowerCase().includes(normalizedSearch)
+    );
+
+    const matchesStatus =
+      statusFilter === "All" || lead.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const today = getToday();
+  const weekEnd = getWeekEnd();
+
+  const followUpGroups = [
+    {
+      title: "Overdue",
+      description: "Follow-ups that need attention",
+      leads: visibleLeads.filter(
+        (lead) => lead.followUpDate < today
+      ),
+    },
+    {
+      title: "Today",
+      description: "Follow up with these customers today",
+      leads: visibleLeads.filter(
+        (lead) => lead.followUpDate === today
+      ),
+    },
+    {
+      title: "This Week",
+      description: "Upcoming follow-ups through the end of this week",
+      leads: visibleLeads.filter(
+        (lead) =>
+          lead.followUpDate > today &&
+          lead.followUpDate <= weekEnd
+      ),
+    },
+    {
+      title: "Later",
+      description: "Follow-ups scheduled for a future week",
+      leads: visibleLeads.filter(
+        (lead) => lead.followUpDate > weekEnd
+      ),
+    },
+  ];
+
+  const navItems = ["Dashboard", "My Leads", "Follow-ups"];
+
+  function markFollowUpDone(lead) {
+    updateLead(lead.id, {
+      followUpDate: "",
+      lastFollowUpCompletedAt: new Date().toISOString(),
+    });
+    setNotice("Follow-up marked as done.");
+  }
+
+  function rescheduleFollowUp(lead, days) {
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() + days);
+    const nextDate =
+      date.getFullYear() + "-" +
+      String(date.getMonth() + 1).padStart(2, "0") + "-" +
+      String(date.getDate()).padStart(2, "0");
+
+    updateLead(lead.id, { followUpDate: nextDate });
+    setNotice("Follow-up rescheduled for " + nextDate + ".");
+  }
+
+  function openLeadWhatsApp(lead) {
+    const phone = (lead.phone || "").replace(/\\D/g, "");
+    if (!phone) {
+      setNotice("Add a phone number first.");
+      return;
+    }
+    const template =
+      MESSAGE_TEMPLATES[messageType] || MESSAGE_TEMPLATES.introduction;
+    const message = template.body(lead.name, lead.business);
+    window.open(
+      "https://wa.me/" + phone + "?text=" + encodeURIComponent(message),
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  function exportLeadsCSV() {
+    if (!leads.length) {
+      setNotice("There are no leads to export yet.");
+      return;
+    }
+    const columns = [
+      "Name", "Email", "Business", "Phone", "Status",
+      "Follow-up Date", "Notes", "Deal Value", "Created At"
+    ];
+    const cell = (value) =>
+      '"' + String(value == null ? "" : value).replace(/"/g, '""') + '"';
+    const rows = leads.map((lead) => [
+      lead.name, lead.email, lead.business, lead.phone, lead.status,
+      lead.followUpDate, lead.notes, lead.dealValue, lead.createdAt
+    ]);
+    const csv = [columns, ...rows]
+      .map((row) => row.map(cell).join(","))
+      .join("\r\n");
+    const blob = new Blob(["\uFEFF" + csv], {
+      type: "text/csv;charset=utf-8;"
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "followupflow-leads.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setNotice("CSV export downloaded.");
+  }
+
+  function renderLead(lead) {
+    const followUpState = getFollowUpState(lead.followUpDate);
+
+    return (
+      <article className="lead" key={lead.id}>
+        <div className="lead-avatar">
+          {(lead.name || "?").trim().charAt(0).toUpperCase()}
+        </div>
+
+        <div className="lead-info">
+          <strong>{lead.name}</strong>
+
+          <p>
+            {lead.business || "No company added"}
+            {lead.email ? ` · ${lead.email}` : ""}
+          </p>
+
+          <span className={getStatusClass(lead.status)}>
+            {lead.status}
+          </span>
+
+          {lead.phone && <p>Phone: {lead.phone}</p>}
+          {Number(lead.dealValue) > 0 && (
+            <p>Deal value: {Number(lead.dealValue).toLocaleString()}</p>
+          )}
+          {lead.notes && (
+            <div className="lead-notes">
+              <strong>Notes</strong>
+              <p>{lead.notes}</p>
+            </div>
+          )}
+          {lead.activity?.length > 0 && (
+            <details className="lead-activity">
+              <summary>Activity history ({lead.activity.length})</summary>
+              <ul>
+                {lead.activity.map((item) => (
+                  <li key={item.id}>
+                    {item.message} — {new Date(item.at).toLocaleString()}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+
+          <div className="followup-date">
+            <label htmlFor={`date-${lead.id}`}>Next follow-up</label>
+
+            <input
+              id={`date-${lead.id}`}
+              type="date"
+              value={lead.followUpDate || ""}
+              onChange={(event) =>
+                handleFollowUpChange(lead, event.target.value)
+              }
+            />
+
+            <span className={getFollowUpClass(followUpState)}>
+              {followUpState}
+            </span>
+
+            {lead.followUpDate && (
+              <p className="date-caption">
+                {formatDate(lead.followUpDate)}
+              </p>
+            )}
+          </div>
+
+          <label
+            className="status-label"
+            htmlFor={`status-${lead.id}`}
+          >
+            Lead status
+          </label>
+
+          <select
+            id={`status-${lead.id}`}
+            value={lead.status}
+            onChange={(event) =>
+              handleStatusChange(lead, event.target.value)
+            }
+          >
+            {STATUSES.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+
+          <div className="lead-actions">
+            <button
+              type="button"
+              className="generate-for-lead"
+              onClick={() => {
+                setSelectedLeadId(String(lead.id));
+                setGeneratedMessage("");
+                setCopyStatus("");
+                setActiveView("Dashboard");
+              }}
+            >
+              Write follow-up message
+            </button>
+
+            <button
+              type="button"
+              className="edit-button"
+              onClick={() => startEditing(lead)}
+            >
+              Edit lead
+            </button>
+          </div>
+
+          <div className="lead-actions followup-actions">
+            <button type="button" onClick={() => markFollowUpDone(lead)}>
+              Mark done
+            </button>
+            <button type="button" onClick={() => rescheduleFollowUp(lead, 3)}>
+              +3 days
+            </button>
+            <button type="button" onClick={() => rescheduleFollowUp(lead, 7)}>
+              +7 days
+            </button>
+            <button type="button" onClick={() => rescheduleFollowUp(lead, 14)}>
+              +14 days
+            </button>
+            {lead.phone && (
+              <button type="button" onClick={() => openLeadWhatsApp(lead)}>
+                WhatsApp
+              </button>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="delete-button"
+          onClick={() => deleteLead(lead.id)}
+          aria-label={`Delete ${lead.name}`}
+          title="Delete lead"
+        >
+          ×
+        </button>
+      </article>
+    );
+  }
 
   return (
     <div className="app">
@@ -372,24 +696,26 @@ export default function App() {
 
         <p className="nav-label">WORKSPACE</p>
 
-        {["Dashboard", "My Leads", "Follow-ups"].map((view) => (
-          <button
-            key={view}
-            type="button"
-            className={`nav-item ${
-              activeView === view ? "active" : ""
-            }`}
-            onClick={() => setActiveView(view)}
-          >
-            {view === "Dashboard" && "▦"}
-            {view === "My Leads" && "♙"}
-            {view === "Follow-ups" && "✓"}
-            &nbsp; {view}
-          </button>
-        ))}
+        <nav aria-label="Main navigation">
+          {navItems.map((view) => (
+            <button
+              key={view}
+              type="button"
+              className={`nav-item ${
+                activeView === view ? "active" : ""
+              }`}
+              onClick={() => setActiveView(view)}
+            >
+              {view === "Dashboard" && "▦"}
+              {view === "My Leads" && "♙"}
+              {view === "Follow-ups" && "✓"}
+              &nbsp; {view}
+            </button>
+          ))}
+        </nav>
 
         <div className="sidebar-bottom">
-          Your business, organized.
+          Your customer workspace
         </div>
       </aside>
 
@@ -404,22 +730,22 @@ export default function App() {
         </header>
 
         {notice && (
-          <p className="app-notice" role="status">
-            {notice}
+          <div className="app-notice" role="status">
+            <span>{notice}</span>
             <button
               type="button"
               className="dismiss-notice"
-              onClick={() => setNotice("")}
               aria-label="Dismiss notification"
+              onClick={() => setNotice("")}
             >
               ×
             </button>
-          </p>
+          </div>
         )}
 
         {storageWarning && (
           <div className="storage-warning" role="alert">
-            <strong>Storage warning:</strong> {storageWarning}
+            {storageWarning}
           </div>
         )}
 
@@ -433,7 +759,7 @@ export default function App() {
               </p>
             </section>
 
-            <section className="stats">
+            <section className="stats" aria-label="Lead statistics">
               <div className="stat-card">
                 <span>Total leads</span>
                 <strong>{leads.length}</strong>
@@ -445,8 +771,18 @@ export default function App() {
               </div>
 
               <div className="stat-card">
-                <span>Converted</span>
+                <span>Converted leads</span>
                 <strong>{convertedCount}</strong>
+              </div>
+
+              <div className="stat-card">
+                <span>Overdue follow-ups</span>
+                <strong>{overdueCount}</strong>
+              </div>
+
+              <div className="stat-card">
+                <span>Due today</span>
+                <strong>{todayCount}</strong>
               </div>
             </section>
 
@@ -486,48 +822,75 @@ export default function App() {
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="e.g. Ayesha Khan"
-                  autoComplete="name"
                   required
                 />
 
-                <label htmlFor="customer-email">
-                  Email address
-                </label>
+                <label htmlFor="customer-email">Email address</label>
                 <input
                   id="customer-email"
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="customer@example.com"
-                  autoComplete="email"
+                  placeholder="name@example.com"
                 />
 
                 <label htmlFor="customer-business">
-                  Business or company
+                  Company / business
                 </label>
                 <input
                   id="customer-business"
                   value={business}
                   onChange={(event) => setBusiness(event.target.value)}
-                  placeholder="e.g. Bright Studio"
+                  placeholder="Company name"
                 />
 
-                <label htmlFor="lead-status">Lead status</label>
+                <label htmlFor="customer-phone">Phone / WhatsApp</label>
+                <input
+                  id="customer-phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  placeholder="e.g. +923001234567"
+                />
+
+                <label htmlFor="customer-notes">Notes</label>
+                <textarea
+                  id="customer-notes"
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder="Customer needs, discussion, next steps..."
+                  rows={3}
+                />
+
+                <label htmlFor="customer-deal-value">Deal value (optional)</label>
+                <input
+                  id="customer-deal-value"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={dealValue}
+                  onChange={(event) => setDealValue(event.target.value)}
+                  placeholder="e.g. 15000"
+                />
+
+                <label htmlFor="customer-status">Lead status</label>
                 <select
-                  id="lead-status"
+                  id="customer-status"
                   value={status}
                   onChange={(event) => setStatus(event.target.value)}
                 >
                   {STATUSES.map((item) => (
-                    <option key={item}>{item}</option>
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
                   ))}
                 </select>
 
-                <label htmlFor="new-follow-up">
-                  Next follow-up date
+                <label htmlFor="customer-follow-up">
+                  Follow-up date
                 </label>
                 <input
-                  id="new-follow-up"
+                  id="customer-follow-up"
                   type="date"
                   value={followUpDate}
                   onChange={(event) =>
@@ -536,15 +899,19 @@ export default function App() {
                 />
 
                 <p className="field-hint">
-                  You can select a past date for a missed follow-up.
+                  You can add a follow-up date now or schedule it later.
                 </p>
 
-                <button type="submit">+ Add customer</button>
+                <button type="submit">+ Add lead</button>
               </form>
             </div>
           )}
 
-          <div className="panel leads-panel">
+          <div
+            className={`panel leads-panel ${
+              activeView === "Follow-ups" ? "full-panel" : ""
+            }`}
+          >
             <div className="panel-heading">
               <div>
                 <h2>
@@ -557,137 +924,107 @@ export default function App() {
 
                 <p className="muted">
                   {activeView === "Follow-ups"
-                    ? "Sorted by the next follow-up date."
-                    : "Manage your customer pipeline and next contact dates."}
+                    ? "Organized by when you need to follow up."
+                    : "Search, filter, and manage your customer pipeline."}
                 </p>
               </div>
 
               <span className="count">{visibleLeads.length}</span>
             </div>
 
+            <div className="lead-filters">
+              <label className="search-field">
+                <span>Search leads</span>
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) =>
+                    setSearchTerm(event.target.value)
+                  }
+                  placeholder="Name, email, or company..."
+                />
+              </label>
+
+              <label className="status-filter">
+                <span>Filter by status</span>
+                <select
+                  value={statusFilter}
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value)
+                  }
+                >
+                  <option value="All">All statuses</option>
+                  {STATUSES.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {(searchTerm || statusFilter !== "All") && (
+                <button
+                  type="button"
+                  className="clear-filters"
+                  onClick={() => {
+                    setSearchTerm("");
+                    setStatusFilter("All");
+                  }}
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+
             {visibleLeads.length === 0 ? (
               <div className="empty">
-                <div className="empty-icon">✓</div>
+                <div className="empty-icon">⌕</div>
+
                 <h3>
-                  {activeView === "Follow-ups"
-                    ? "No scheduled follow-ups"
-                    : "No leads yet"}
+                  {normalizedSearch || statusFilter !== "All"
+                    ? "No matching leads"
+                    : activeView === "Follow-ups"
+                      ? "No scheduled follow-ups"
+                      : "No leads yet"}
                 </h3>
+
                 <p>
-                  {activeView === "Follow-ups"
-                    ? "Add a follow-up date to a lead to see it here."
-                    : "Add your first customer using the form."}
+                  {normalizedSearch || statusFilter !== "All"
+                    ? "Try another search or clear your filters."
+                    : activeView === "Follow-ups"
+                      ? "Add a follow-up date to a lead to see it here."
+                      : "Add your first customer using the form."}
                 </p>
+              </div>
+            ) : activeView === "Follow-ups" ? (
+              <div className="grouped-followups">
+                {followUpGroups.map(
+                  (group) =>
+                    group.leads.length > 0 && (
+                      <section
+                        className="followup-group"
+                        key={group.title}
+                      >
+                        <div className="group-heading">
+                          <div>
+                            <h3>{group.title}</h3>
+                            <p>{group.description}</p>
+                          </div>
+                          <span className="count">
+                            {group.leads.length}
+                          </span>
+                        </div>
+
+                        <div className="lead-list">
+                          {group.leads.map((lead) => renderLead(lead))}
+                        </div>
+                      </section>
+                    )
+                )}
               </div>
             ) : (
               <div className="lead-list">
-                {visibleLeads.map((lead) => {
-                  const followUpState = getFollowUpState(
-                    lead.followUpDate
-                  );
-
-                  return (
-                    <article className="lead" key={lead.id}>
-                      <div className="lead-avatar">
-                        {(lead.name || "?").charAt(0).toUpperCase()}
-                      </div>
-
-                      <div className="lead-info">
-                        <strong>{lead.name}</strong>
-
-                        <p>
-                          {lead.business || lead.email || "New customer"}
-                        </p>
-
-                        {lead.email && lead.business && (
-                          <p>{lead.email}</p>
-                        )}
-
-                        <span
-                          className={`status status-${getStatusClass(
-                            lead.status
-                          )}`}
-                        >
-                          {lead.status}
-                        </span>
-
-                        <div className="followup-date">
-                          <label htmlFor={`date-${lead.id}`}>
-                            Next follow-up
-                          </label>
-
-                          <input
-                            id={`date-${lead.id}`}
-                            type="date"
-                            value={lead.followUpDate || ""}
-                            onChange={(event) =>
-                              handleFollowUpChange(
-                                lead,
-                                event.target.value
-                              )
-                            }
-                          />
-
-                          <span
-                            className={`followup-badge followup-${getFollowUpClass(
-                              followUpState
-                            )}`}
-                          >
-                            {followUpState}
-                          </span>
-
-                          {lead.followUpDate && (
-                            <p className="date-caption">
-                              {formatDate(lead.followUpDate)}
-                            </p>
-                          )}
-                        </div>
-
-                        <label
-                          className="status-label"
-                          htmlFor={`status-${lead.id}`}
-                        >
-                          Lead status
-                        </label>
-
-                        <select
-                          id={`status-${lead.id}`}
-                          value={lead.status}
-                          onChange={(event) =>
-                            handleStatusChange(lead, event.target.value)
-                          }
-                        >
-                          {STATUSES.map((item) => (
-                            <option key={item}>{item}</option>
-                          ))}
-                        </select>
-
-                        <button
-                          type="button"
-                          className="generate-for-lead"
-                          onClick={() => {
-                            setSelectedLeadId(String(lead.id));
-                            setGeneratedMessage("");
-                            setCopyStatus("");
-                            setActiveView("Dashboard");
-                          }}
-                        >
-                          Write follow-up message
-                        </button>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="delete-button"
-                        onClick={() => deleteLead(lead.id)}
-                        aria-label={`Delete ${lead.name}`}
-                        title="Delete lead"
-                      >
-                        ×
-                      </button>
-                    </article>
-                  );
-                })}
+                {visibleLeads.map((lead) => renderLead(lead))}
               </div>
             )}
           </div>
@@ -702,24 +1039,28 @@ export default function App() {
                 Create a personalized English message for your customer.
               </p>
             </div>
-
             <span className="message-icon">✉</span>
           </div>
 
+          <button
+            type="button"
+            onClick={exportLeadsCSV}
+            className="export-csv-button"
+          >
+            Export leads CSV
+          </button>
+
           {leads.length === 0 ? (
             <div className="empty">
-              <h3>Add a customer to get started</h3>
-              <p>
-                Your generated message will be personalized for that lead.
-              </p>
+              <h3>Add a lead to get started</h3>
+              <p>Your personalized follow-up message will appear here.</p>
             </div>
           ) : (
             <>
               <div className="message-controls">
-                <div>
-                  <label htmlFor="message-lead">Choose customer</label>
+                <label>
+                  Choose customer
                   <select
-                    id="message-lead"
                     value={selectedLeadId}
                     onChange={(event) => {
                       setSelectedLeadId(event.target.value);
@@ -727,19 +1068,19 @@ export default function App() {
                       setCopyStatus("");
                     }}
                   >
-                    <option value="">Select a customer...</option>
+                    <option value="">Select a customer</option>
                     {leads.map((lead) => (
                       <option key={lead.id} value={String(lead.id)}>
                         {lead.name}
+                        {lead.business ? ` — ${lead.business}` : ""}
                       </option>
                     ))}
                   </select>
-                </div>
+                </label>
 
-                <div>
-                  <label htmlFor="message-type">Message purpose</label>
+                <label>
+                  Message purpose
                   <select
-                    id="message-type"
                     value={messageType}
                     onChange={(event) => {
                       setMessageType(event.target.value);
@@ -755,16 +1096,13 @@ export default function App() {
                       )
                     )}
                   </select>
-                </div>
+                </label>
               </div>
 
               {selectedLead && (
                 <div className="selected-customer">
-                  Writing a message for{" "}
-                  <strong>{selectedLead.name}</strong>
-                  {selectedLead.business
-                    ? ` · ${selectedLead.business}`
-                    : ""}
+                  Selected customer: <strong>{selectedLead.name}</strong>
+                  {selectedLead.email ? ` · ${selectedLead.email}` : ""}
                 </div>
               )}
 
@@ -781,19 +1119,18 @@ export default function App() {
                 className="generated-label"
                 htmlFor="generated-message"
               >
-                Your message (you can edit it)
+                Your message (you can edit it before copying)
               </label>
 
               <textarea
                 id="generated-message"
                 className="generated-message"
-                rows={10}
                 value={generatedMessage}
                 onChange={(event) => {
                   setGeneratedMessage(event.target.value);
                   setCopyStatus("");
                 }}
-                placeholder="Choose a customer and click Generate message..."
+                placeholder="Choose a customer and click Generate message."
               />
 
               <div className="message-actions">
@@ -814,7 +1151,7 @@ export default function App() {
                     setCopyStatus("");
                   }}
                 >
-                  Clear
+                  Clear message
                 </button>
               </div>
 
@@ -825,19 +1162,166 @@ export default function App() {
               )}
 
               <p className="message-note">
-                Your leads and message templates are stored locally in
-                this browser when storage is available. Review messages
-                before sending. No email or WhatsApp message is sent
-                automatically.
+                Review the message before sending. Messages are generated
+                in your browser and are not sent automatically.
               </p>
             </>
           )}
         </section>
 
-        <footer>
-          FollowUpFlow · Never lose a lead again.
-        </footer>
+        <footer>FollowUpFlow · Never lose a lead again.</footer>
       </main>
+
+      {editingLeadId !== null && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setEditingLeadId(null);
+            }
+          }}
+        >
+          <section
+            className="edit-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-lead-title"
+          >
+            <div className="modal-heading">
+              <div>
+                <p className="eyebrow">UPDATE CUSTOMER</p>
+                <h2 id="edit-lead-title">Edit lead details</h2>
+              </div>
+
+              <button
+                type="button"
+                className="dismiss-notice"
+                aria-label="Close edit form"
+                onClick={() => setEditingLeadId(null)}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={saveEdit}>
+              <label htmlFor="edit-name">Customer name *</label>
+              <input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(event) =>
+                  setEditForm((old) => ({
+                    ...old,
+                    name: event.target.value,
+                  }))
+                }
+                required
+              />
+
+              <label htmlFor="edit-email">Email address</label>
+              <input
+                id="edit-email"
+                type="email"
+                value={editForm.email}
+                onChange={(event) =>
+                  setEditForm((old) => ({
+                    ...old,
+                    email: event.target.value,
+                  }))
+                }
+              />
+
+              <label htmlFor="edit-business">Company / business</label>
+              <input
+                id="edit-business"
+                value={editForm.business}
+                onChange={(event) =>
+                  setEditForm((old) => ({
+                    ...old,
+                    business: event.target.value,
+                  }))
+                }
+              />
+
+              <label htmlFor="edit-phone">Phone / WhatsApp</label>
+              <input
+                id="edit-phone"
+                type="tel"
+                value={editForm.phone}
+                onChange={(event) =>
+                  setEditForm((old) => ({ ...old, phone: event.target.value }))
+                }
+              />
+
+              <label htmlFor="edit-notes">Notes</label>
+              <textarea
+                id="edit-notes"
+                rows={3}
+                value={editForm.notes}
+                onChange={(event) =>
+                  setEditForm((old) => ({ ...old, notes: event.target.value }))
+                }
+              />
+
+              <label htmlFor="edit-deal-value">Deal value</label>
+              <input
+                id="edit-deal-value"
+                type="number"
+                min="0"
+                step="0.01"
+                value={editForm.dealValue}
+                onChange={(event) =>
+                  setEditForm((old) => ({ ...old, dealValue: event.target.value }))
+                }
+              />
+
+              <label htmlFor="edit-status">Lead status</label>
+              <select
+                id="edit-status"
+                value={editForm.status}
+                onChange={(event) =>
+                  setEditForm((old) => ({
+                    ...old,
+                    status: event.target.value,
+                  }))
+                }
+              >
+                {STATUSES.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+
+              <label htmlFor="edit-date">Follow-up date</label>
+              <input
+                id="edit-date"
+                type="date"
+                value={editForm.followUpDate}
+                onChange={(event) =>
+                  setEditForm((old) => ({
+                    ...old,
+                    followUpDate: event.target.value,
+                  }))
+                }
+              />
+
+              <div className="modal-actions">
+                <button type="submit" className="generate-button">
+                  Save changes
+                </button>
+                <button
+                  type="button"
+                  className="secondary-message-button"
+                  onClick={() => setEditingLeadId(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

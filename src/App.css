@@ -1047,3 +1047,136 @@ footer {
     flex: 1;
   }
 }
+
+/* UX polish: empty state, responsive controls and accessible contrast */
+.empty-state-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.empty-state-action:hover {
+  background: #1d4ed8;
+}
+
+.empty-state-action:focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 3px;
+}
+
+.empty,
+.app-notice,
+.copy-status {
+  overflow-wrap: anywhere;
+}
+
+.app-notice {
+  border-radius: 10px;
+  line-height: 1.6;
+}
+
+:root[data-theme="dark"] .status-new {
+  background: #1e3a5f;
+  color: #bfdbfe;
+}
+
+:root[data-theme="dark"] .status-interested {
+  background: #593d12;
+  color: #fde68a;
+}
+
+:root[data-theme="dark"] .status-converted {
+  background: #14532d;
+  color: #bbf7d0;
+}
+
+:root[data-theme="dark"] .followup-overdue {
+  background: #641e1e;
+  color: #fecaca;
+}
+
+:root[data-theme="dark"] .followup-due-today {
+  background: #593d12;
+  color: #fde68a;
+}
+
+:root[data-theme="dark"] .followup-upcoming {
+  background: #14532d;
+  color: #bbf7d0;
+}
+
+:root[data-theme="dark"] .empty p {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .copy-status {
+  color: #86efac;
+}
+
+@media (max-width: 600px) {
+  .main,
+  .panel,
+  .lead,
+  .followup-group {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .panel input,
+  .panel select,
+  .panel textarea,
+  .edit-modal input,
+  .edit-modal select,
+  .edit-modal textarea {
+    width: 100%;
+    max-width: 100%;
+    min-height: 44px;
+  }
+
+  .panel textarea,
+  .edit-modal textarea {
+    min-height: 90px;
+  }
+
+  .message-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .message-actions button,
+  .empty-state-action {
+    min-height: 44px;
+  }
+
+  .lead {
+    overflow-wrap: anywhere;
+  }
+
+  .theme-toggle {
+    margin-right: 0;
+  }
+
+  .empty {
+    padding: 32px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -785,7 +785,7 @@ export default function App() {
 
           <p>
             {lead.business || "No company added"}
-            {lead.email ? ` Â· ${lead.email}` : ""}
+            {lead.email ? ` · ${lead.email}` : ""}
           </p>
 
           <span className={getStatusClass(lead.status)}>
@@ -808,7 +808,7 @@ export default function App() {
               <ul>
                 {lead.activity.map((item) => (
                   <li key={item.id}>
-                    {item.message} â€” {new Date(item.at).toLocaleString()}
+                    {item.message} — {new Date(item.at).toLocaleString()}
                   </li>
                 ))}
               </ul>
@@ -910,7 +910,7 @@ export default function App() {
           aria-label={`Delete ${lead.name}`}
           title="Delete lead"
         >
-          Ã—
+          ×
         </button>
       </article>
     );
@@ -935,9 +935,9 @@ export default function App() {
               }`}
               onClick={() => setActiveView(view)}
             >
-              {view === "Dashboard" && "â–¦"}
-              {view === "My Leads" && "â™™"}
-              {view === "Follow-ups" && "âœ“"}
+              {view === "Dashboard" && "▦"}
+              {view === "My Leads" && "♡"}
+              {view === "Follow-ups" && "✓"}
               &nbsp; {view}
             </button>
           ))}
@@ -975,7 +975,7 @@ export default function App() {
               aria-label="Dismiss notification"
               onClick={() => setNotice("")}
             >
-              Ã—
+              ×
             </button>
           </div>
         )}
@@ -1038,7 +1038,7 @@ export default function App() {
                 type="button"
                 onClick={() => setActiveView("Follow-ups")}
               >
-                View follow-ups â†’
+                View follow-ups →
               </button>
             </section>
           </>
@@ -1046,7 +1046,7 @@ export default function App() {
 
         <section className="content-grid">
           {activeView !== "Follow-ups" && (
-            <div className="panel">
+            <div className="panel" id="add-lead-panel">
               <h2>Add a lead</h2>
               <p className="muted">Save a potential customer.</p>
 
@@ -1215,7 +1215,7 @@ export default function App() {
 
             {visibleLeads.length === 0 ? (
               <div className="empty">
-                <div className="empty-icon">âŒ•</div>
+                <div className="empty-icon">◷</div>
 
                 <h3>
                   {normalizedSearch || statusFilter !== "All"
@@ -1232,6 +1232,24 @@ export default function App() {
                       ? "Add a follow-up date to a lead to see it here."
                       : "Add your first customer using the form."}
                 </p>
+
+                {leads.length === 0 && activeView !== "Follow-ups" && (
+                  <button
+                    type="button"
+                    className="primary-button empty-state-action"
+                    onClick={() => {
+                      document.getElementById("add-lead-panel")?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start"
+                      });
+                      document.getElementById("customer-name")?.focus({
+                        preventScroll: true
+                      });
+                    }}
+                  >
+                    Add your first lead
+                  </button>
+                )}
               </div>
             ) : activeView === "Follow-ups" ? (
               <div className="grouped-followups">
@@ -1276,7 +1294,7 @@ export default function App() {
                 Create a personalized English message for your customer.
               </p>
             </div>
-            <span className="message-icon">âœ‰</span>
+            <span className="message-icon">✉</span>
           </div>
 
           <button
@@ -1350,7 +1368,7 @@ export default function App() {
                     {leads.map((lead) => (
                       <option key={lead.id} value={String(lead.id)}>
                         {lead.name}
-                        {lead.business ? ` â€” ${lead.business}` : ""}
+                        {lead.business ? ` — ${lead.business}` : ""}
                       </option>
                     ))}
                   </select>
@@ -1463,7 +1481,7 @@ export default function App() {
               {selectedLead && (
                 <div className="selected-customer">
                   Selected customer: <strong>{selectedLead.name}</strong>
-                  {selectedLead.email ? ` Â· ${selectedLead.email}` : ""}
+                  {selectedLead.email ? ` · ${selectedLead.email}` : ""}
                 </div>
               )}
 
@@ -1548,7 +1566,7 @@ export default function App() {
           )}
         </section>
 
-        <footer>FollowUpFlow Â· Never lose a lead again.</footer>
+        <footer>FollowUpFlow · Never lose a lead again.</footer>
       </main>
 
       {editingLeadId !== null && (
@@ -1579,7 +1597,7 @@ export default function App() {
                 aria-label="Close edit form"
                 onClick={() => setEditingLeadId(null)}
               >
-                Ã—
+                ×
               </button>
             </div>
 

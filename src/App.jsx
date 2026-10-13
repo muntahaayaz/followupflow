@@ -132,6 +132,15 @@ function getWeekEnd() {
 
 export default function App() {
   const [leads, setLeads] = useState(loadLeads);
+  const [darkMode, setDarkMode] = useState(
+    () => localStorage.getItem("followupflow-theme") === "dark"
+  );
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    localStorage.setItem("followupflow-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
+  const [today, setToday] = useState(getToday);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -162,9 +171,57 @@ export default function App() {
   const [messageType, setMessageType] = useState("introduction");
   const [generatedMessage, setGeneratedMessage] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
+  const [messageTone, setMessageTone] = useState("Friendly");
+  const [customTemplates, setCustomTemplates] = useState(() => {
+    try {
+      const saved = localStorage.getItem("followupflow-custom-templates-v1");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [customTemplateName, setCustomTemplateName] = useState("");
+  const [customTemplateSubject, setCustomTemplateSubject] = useState("");
+  const [customTemplateBody, setCustomTemplateBody] = useState("");
+  const [editingTemplateId, setEditingTemplateId] = useState(null);
+  const [messageSettings, setMessageSettings] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("followupflow-message-settings-v1")) || {
+        senderName: "",
+        senderBusiness: ""
+      };
+    } catch {
+      return { senderName: "", senderBusiness: "" };
+    }
+  });
 
   const [storageWarning, setStorageWarning] = useState("");
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "followupflow-message-settings-v1",
+        JSON.stringify(messageSettings)
+      );
+    } catch {
+      setNotice("Settings could not be saved in this browser.");
+    }
+  }, [messageSettings]);
+
+  useEffect(() => {
+    const refreshToday = () => setToday(getToday());
+    const intervalId = window.setInterval(refreshToday, 60_000);
+
+    window.addEventListener("focus", refreshToday);
+    document.addEventListener("visibilitychange", refreshToday);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshToday);
+      document.removeEventListener("visibilitychange", refreshToday);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -354,22 +411,195 @@ export default function App() {
     (lead) => String(lead.id) === String(selectedLeadId)
   );
 
+  useEffect(() => {
+    if (!selectedLead) {
+      setGeneratedMessage("");
+      setCopyStatus("");
+      return;
+    }
+
+    const suggestions = {
+      New: "introduction",
+      Contacted: "reminder",
+      Interested: "interested",
+      Converted: "closing"
+    };
+
+    setMessageType(suggestions[selectedLead.status] || "introduction");
+    setGeneratedMessage("");
+    setCopyStatus("");
+  }, [selectedLeadId, selectedLead?.status]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "followupflow-custom-templates-v1",
+        JSON.stringify(customTemplates)
+      );
+    } catch {
+      setNotice("Custom templates could not be saved in this browser.");
+    }
+  }, [customTemplates]);
+
+  function saveCustomTemplate() {
+    const label = customTemplateName.trim();
+    const subject = customTemplateSubject.trim();
+    const body = customTemplateBody.trim();
+
+    if (!label || !subject || !body) {
+      setNotice("Enter a template name, subject, and message.");
+      return;
+    }
+
+    const duplicate = customTemplates.some(
+      (item) =>
+        item.id !== editingTemplateId &&
+        item.label.trim().toLowerCase() === label.toLowerCase()
+    );
+
+    if (duplicate) {
+      setNotice("A template with this name already exists.");
+      return;
+    }
+
+    if (editingTemplateId) {
+      setCustomTemplates((current) =>
+        current.map((item) =>
+          item.id === editingTemplateId
+            ? { ...item, label, subject, body }
+            : item
+        )
+      );
+      setMessageType(editingTemplateId);
+      setNotice("Custom template updated.");
+    } else {
+      const id = "custom-" + Date.now();
+      setCustomTemplates((current) => [
+        ...current,
+        { id, label, subject, body }
+      ]);
+      setMessageType(id);
+      setNotice("Custom template saved.");
+    }
+
+    setEditingTemplateId(null);
+    setCustomTemplateName("");
+    setCustomTemplateSubject("");
+    setCustomTemplateBody("");
+    setGeneratedMessage("");
+    setCopyStatus("");
+  }
+
+  function editCustomTemplate(template) {
+    setEditingTemplateId(template.id);
+    setCustomTemplateName(template.label);
+    setCustomTemplateSubject(template.subject);
+    setCustomTemplateBody(template.body);
+    setNotice("Editing custom template.");
+  }
+
+  function deleteCustomTemplate(template) {
+    if (!window.confirm('Delete the template "' + template.label + '"?')) {
+      return;
+    }
+
+    setCustomTemplates((current) =>
+      current.filter((item) => item.id !== template.id)
+    );
+
+    if (messageType === template.id) {
+      setMessageType("introduction");
+      setGeneratedMessage("");
+      setCopyStatus("");
+    }
+
+    if (editingTemplateId === template.id) {
+      setEditingTemplateId(null);
+      setCustomTemplateName("");
+      setCustomTemplateSubject("");
+      setCustomTemplateBody("");
+    }
+
+    setNotice("Custom template deleted.");
+  }
+
   function generateMessage() {
     if (!selectedLead) {
       setNotice("Please select a customer first.");
       return;
     }
 
-    const template = MESSAGE_TEMPLATES[messageType];
+    const customTemplate = customTemplates.find(
+      (item) => item.id === messageType
+    );
+    const template =
+      customTemplate ||
+      MESSAGE_TEMPLATES[messageType] ||
+      MESSAGE_TEMPLATES.introduction;
+
+    let body = typeof template.body === "function"
+      ? template.body(selectedLead.name, selectedLead.business)
+      : template.body
+          .replace(/\{name\}/g, selectedLead.name || "")
+          .replace(/\{business\}/g, selectedLead.business || "")
+          .replace(/\{senderName\}/g, messageSettings.senderName || "")
+          .replace(/\{senderBusiness\}/g, messageSettings.senderBusiness || "");
+
+    if (messageTone === "Formal") {
+      body = body.replace(/^Hi\b/gm, "Dear");
+      body = body.replace(/Thanks,/g, "Thank you,");
+      body = body.replace(/!$/gm, ".");
+    } else if (messageTone === "Short") {
+      body = body.split(/\n\s*\n/).slice(0, 2).join("\n\n");
+    }
+
+    const signature = [
+      messageSettings.senderName.trim(),
+      messageSettings.senderBusiness.trim()
+    ].filter(Boolean).join("\n");
+
+    if (signature) {
+      body += "\n\nBest regards,\n" + signature;
+    }
 
     setGeneratedMessage(
-      `Subject: ${template.subject}\n\n${template.body(
-        selectedLead.name,
-        selectedLead.business
-      )}`
+      `Subject: ${template.subject}\n\n${body}`
     );
-
     setCopyStatus("");
+  }
+
+  function openMessageEmail() {
+    if (!generatedMessage.trim()) return;
+
+    const parts = generatedMessage.split("\n\n");
+    const subject = (parts.shift() || "").replace(/^Subject: /, "");
+    const body = parts.join("\n\n");
+    const recipient = selectedLead?.email || "";
+
+    window.location.href =
+      "mailto:" + encodeURIComponent(recipient) +
+      "?subject=" + encodeURIComponent(subject) +
+      "&body=" + encodeURIComponent(body);
+  }
+
+  function openMessageWhatsApp() {
+    if (!generatedMessage.trim()) return;
+
+    const phone = (selectedLead?.phone || "").replace(/[^0-9]/g, "");
+    if (!phone) {
+      setNotice("Add a phone number to this customer first.");
+      return;
+    }
+
+    const parts = generatedMessage.split("\n\n");
+    parts.shift();
+    const body = parts.join("\n\n");
+
+    window.open(
+      "https://wa.me/" + phone + "?text=" + encodeURIComponent(body),
+      "_blank",
+      "noopener,noreferrer"
+    );
   }
 
   async function copyMessage() {
@@ -435,7 +665,6 @@ export default function App() {
     return matchesSearch && matchesStatus;
   });
 
-  const today = getToday();
   const weekEnd = getWeekEnd();
 
   const followUpGroups = [
@@ -556,7 +785,7 @@ export default function App() {
 
           <p>
             {lead.business || "No company added"}
-            {lead.email ? ` · ${lead.email}` : ""}
+            {lead.email ? ` Â· ${lead.email}` : ""}
           </p>
 
           <span className={getStatusClass(lead.status)}>
@@ -579,7 +808,7 @@ export default function App() {
               <ul>
                 {lead.activity.map((item) => (
                   <li key={item.id}>
-                    {item.message} — {new Date(item.at).toLocaleString()}
+                    {item.message} â€” {new Date(item.at).toLocaleString()}
                   </li>
                 ))}
               </ul>
@@ -681,7 +910,7 @@ export default function App() {
           aria-label={`Delete ${lead.name}`}
           title="Delete lead"
         >
-          ×
+          Ã—
         </button>
       </article>
     );
@@ -706,9 +935,9 @@ export default function App() {
               }`}
               onClick={() => setActiveView(view)}
             >
-              {view === "Dashboard" && "▦"}
-              {view === "My Leads" && "♙"}
-              {view === "Follow-ups" && "✓"}
+              {view === "Dashboard" && "â–¦"}
+              {view === "My Leads" && "â™™"}
+              {view === "Follow-ups" && "âœ“"}
               &nbsp; {view}
             </button>
           ))}
@@ -726,6 +955,14 @@ export default function App() {
             <h1>{activeView}</h1>
           </div>
 
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => setDarkMode((current) => !current)}
+            aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {darkMode ? "Light mode" : "Dark mode"}
+          </button>
           <span className="avatar">F</span>
         </header>
 
@@ -738,7 +975,7 @@ export default function App() {
               aria-label="Dismiss notification"
               onClick={() => setNotice("")}
             >
-              ×
+              Ã—
             </button>
           </div>
         )}
@@ -801,7 +1038,7 @@ export default function App() {
                 type="button"
                 onClick={() => setActiveView("Follow-ups")}
               >
-                View follow-ups →
+                View follow-ups â†’
               </button>
             </section>
           </>
@@ -978,7 +1215,7 @@ export default function App() {
 
             {visibleLeads.length === 0 ? (
               <div className="empty">
-                <div className="empty-icon">⌕</div>
+                <div className="empty-icon">âŒ•</div>
 
                 <h3>
                   {normalizedSearch || statusFilter !== "All"
@@ -1039,7 +1276,7 @@ export default function App() {
                 Create a personalized English message for your customer.
               </p>
             </div>
-            <span className="message-icon">✉</span>
+            <span className="message-icon">âœ‰</span>
           </div>
 
           <button
@@ -1057,6 +1294,47 @@ export default function App() {
             </div>
           ) : (
             <>
+              <div className="message-settings">
+                <h3>Your business settings</h3>
+                <label>
+                  Your name
+                  <input
+                    value={messageSettings.senderName}
+                    onChange={(event) =>
+                      setMessageSettings((current) => ({
+                        ...current,
+                        senderName: event.target.value
+                      }))
+                    }
+                    placeholder="Enter your name"
+                  />
+                </label>
+                <label>
+                  Your business name
+                  <input
+                    value={messageSettings.senderBusiness}
+                    onChange={(event) =>
+                      setMessageSettings((current) => ({
+                        ...current,
+                        senderBusiness: event.target.value
+                      }))
+                    }
+                    placeholder="Enter your business name"
+                  />
+                </label>
+                <label>
+                  Message tone
+                  <select
+                    value={messageTone}
+                    onChange={(event) => setMessageTone(event.target.value)}
+                  >
+                    <option value="Friendly">Friendly</option>
+                    <option value="Formal">Formal</option>
+                    <option value="Short">Short</option>
+                  </select>
+                </label>
+              </div>
+
               <div className="message-controls">
                 <label>
                   Choose customer
@@ -1072,7 +1350,7 @@ export default function App() {
                     {leads.map((lead) => (
                       <option key={lead.id} value={String(lead.id)}>
                         {lead.name}
-                        {lead.business ? ` — ${lead.business}` : ""}
+                        {lead.business ? ` â€” ${lead.business}` : ""}
                       </option>
                     ))}
                   </select>
@@ -1095,14 +1373,97 @@ export default function App() {
                         </option>
                       )
                     )}
+                    {customTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.label} (Custom)
+                      </option>
+                    ))}
                   </select>
                 </label>
+              </div>
+
+              <div className="message-settings">
+                <h3>Custom message templates</h3>
+                <label>
+                  Template name
+                  <input
+                    value={customTemplateName}
+                    onChange={(event) => setCustomTemplateName(event.target.value)}
+                    placeholder="e.g. New customer welcome"
+                  />
+                </label>
+                <label>
+                  Email subject
+                  <input
+                    value={customTemplateSubject}
+                    onChange={(event) => setCustomTemplateSubject(event.target.value)}
+                    placeholder="Enter message subject"
+                  />
+                </label>
+                <label>
+                  Message body
+                  <textarea
+                    value={customTemplateBody}
+                    onChange={(event) => setCustomTemplateBody(event.target.value)}
+                    placeholder="Write your message. You can use {name} and {business}."
+                    rows={4}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="generate-button"
+                  onClick={saveCustomTemplate}
+                >
+                  {editingTemplateId ? "Save changes" : "Save custom template"}
+                </button>
+
+                {customTemplates.length > 0 && (
+                  <div className="custom-template-list">
+                    <h4>Saved custom templates</h4>
+                    {customTemplates.map((template) => (
+                      <div
+                        key={template.id}
+                        className="custom-template-item"
+                      >
+                        <strong>{template.label}</strong>
+                        <div className="message-actions">
+                          <button
+                            type="button"
+                            onClick={() => editCustomTemplate(template)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteCustomTemplate(template)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {editingTemplateId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingTemplateId(null);
+                      setCustomTemplateName("");
+                      setCustomTemplateSubject("");
+                      setCustomTemplateBody("");
+                    }}
+                  >
+                    Cancel editing
+                  </button>
+                )}
               </div>
 
               {selectedLead && (
                 <div className="selected-customer">
                   Selected customer: <strong>{selectedLead.name}</strong>
-                  {selectedLead.email ? ` · ${selectedLead.email}` : ""}
+                  {selectedLead.email ? ` Â· ${selectedLead.email}` : ""}
                 </div>
               )}
 
@@ -1146,6 +1507,24 @@ export default function App() {
                 <button
                   type="button"
                   className="secondary-message-button"
+                  onClick={openMessageEmail}
+                  disabled={!generatedMessage.trim()}
+                >
+                  Open Email
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-message-button"
+                  onClick={openMessageWhatsApp}
+                  disabled={!generatedMessage.trim()}
+                >
+                  Open WhatsApp
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-message-button"
                   onClick={() => {
                     setGeneratedMessage("");
                     setCopyStatus("");
@@ -1169,7 +1548,7 @@ export default function App() {
           )}
         </section>
 
-        <footer>FollowUpFlow · Never lose a lead again.</footer>
+        <footer>FollowUpFlow Â· Never lose a lead again.</footer>
       </main>
 
       {editingLeadId !== null && (
@@ -1200,7 +1579,7 @@ export default function App() {
                 aria-label="Close edit form"
                 onClick={() => setEditingLeadId(null)}
               >
-                ×
+                Ã—
               </button>
             </div>
 

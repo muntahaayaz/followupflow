@@ -1,6 +1,7 @@
-﻿
+
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
+import { normalizePhone } from "./utils/phone";
 
 const STORAGE_KEY = "followupflow-leads";
 const STATUSES = ["New", "Contacted", "Interested", "Converted"];
@@ -90,9 +91,11 @@ function loadLeads() {
         activity: Array.isArray(lead.activity) ? lead.activity : [],
         status: STATUSES.includes(lead.status) ? lead.status : "New",
         followUpDate:
-          typeof lead.followUpDate === "string"
-            ? lead.followUpDate
-            : "",
+          lead.status === "Converted"
+            ? ""
+            : typeof lead.followUpDate === "string"
+              ? lead.followUpDate
+              : "",
         createdAt: lead.createdAt || new Date().toISOString(),
       }));
   } catch {
@@ -331,7 +334,7 @@ export default function App() {
         );
         const entries = changed.map((key) => ({
           id: createLeadId(),
-          message: labels[key] || (key + " updated"),
+          message: key === "status" ? ("Status changed from " + lead.status + " to " + effectiveChanges.status) : (labels[key] || (key + " updated")),
           at: new Date().toISOString(),
         }));
 
@@ -441,7 +444,7 @@ export default function App() {
     setMessageType(suggestions[selectedLead.status] || "introduction");
     setGeneratedMessage("");
     setCopyStatus("");
-  }, [selectedLeadId, selectedLead]);
+  }, [selectedLeadId, selectedLead?.status]);
 
   useEffect(() => {
     try {
@@ -597,18 +600,14 @@ export default function App() {
 
   function openMessageWhatsApp() {
     if (!generatedMessage.trim()) return;
-    const rawPhone = (selectedLead?.phone || "").replace(/\D/g, "");
-    const phone = rawPhone.startsWith("00")
-      ? rawPhone.slice(2)
-      : rawPhone.startsWith("0")
-        ? "92" + rawPhone.slice(1)
-        : rawPhone.startsWith("92")
-          ? rawPhone
-          : rawPhone.length === 10 && rawPhone.startsWith("3")
-            ? "92" + rawPhone
-            : rawPhone;
+    const rawPhone = String(selectedLead?.phone ?? "").trim();
+    const phone = normalizePhone(rawPhone);
     if (!phone) {
-      setNotice("Add a phone number to this customer first.");
+      setNotice(
+        rawPhone
+          ? "Enter a valid phone number with 8-15 digits."
+          : "Add a phone number to this customer first."
+      );
       return;
     }
 
@@ -766,18 +765,14 @@ export default function App() {
   }
 
   function openLeadWhatsApp(lead) {
-    const rawPhone = (lead.phone || "").replace(/\D/g, "");
-    const phone = rawPhone.startsWith("00")
-      ? rawPhone.slice(2)
-      : rawPhone.startsWith("0")
-        ? "92" + rawPhone.slice(1)
-        : rawPhone.startsWith("92")
-          ? rawPhone
-          : rawPhone.length === 10 && rawPhone.startsWith("3")
-            ? "92" + rawPhone
-            : rawPhone;
+    const rawPhone = String(lead.phone ?? "").trim();
+    const phone = normalizePhone(rawPhone);
     if (!phone) {
-      setNotice("Add a phone number first.");
+      setNotice(
+        rawPhone
+          ? "Enter a valid phone number with 8-15 digits."
+          : "Add a phone number first."
+      );
       return;
     }
     const template =

@@ -1,4 +1,4 @@
-
+﻿
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
@@ -197,6 +197,15 @@ export default function App() {
 
   const [storageWarning, setStorageWarning] = useState("");
   const [notice, setNotice] = useState("");
+  const [remindersEnabled, setRemindersEnabled] = useState(() => {
+    try {
+      return localStorage.getItem("followupflow-reminders-enabled") === "true" &&
+        "Notification" in window &&
+        Notification.permission === "granted";
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     try {
@@ -313,8 +322,12 @@ export default function App() {
           lastFollowUpCompletedAt: "Follow-up marked done",
         };
 
-        const changed = Object.keys(changes).filter(
-          (key) => lead[key] !== changes[key]
+        const effectiveChanges = changes.status === "Converted"
+          ? { ...changes, followUpDate: "" }
+          : changes;
+
+        const changed = Object.keys(effectiveChanges).filter(
+          (key) => lead[key] !== effectiveChanges[key]
         );
         const entries = changed.map((key) => ({
           id: createLeadId(),
@@ -324,7 +337,7 @@ export default function App() {
 
         return {
           ...lead,
-          ...changes,
+          ...effectiveChanges,
           activity: [...entries, ...(lead.activity || [])].slice(0, 30),
         };
       })
@@ -428,7 +441,7 @@ export default function App() {
     setMessageType(suggestions[selectedLead.status] || "introduction");
     setGeneratedMessage("");
     setCopyStatus("");
-  }, [selectedLeadId, selectedLead?.status]);
+  }, [selectedLeadId, selectedLead]);
 
   useEffect(() => {
     try {
@@ -584,8 +597,16 @@ export default function App() {
 
   function openMessageWhatsApp() {
     if (!generatedMessage.trim()) return;
-
-    const phone = (selectedLead?.phone || "").replace(/[^0-9]/g, "");
+    const rawPhone = (selectedLead?.phone || "").replace(/\D/g, "");
+    const phone = rawPhone.startsWith("00")
+      ? rawPhone.slice(2)
+      : rawPhone.startsWith("0")
+        ? "92" + rawPhone.slice(1)
+        : rawPhone.startsWith("92")
+          ? rawPhone
+          : rawPhone.length === 10 && rawPhone.startsWith("3")
+            ? "92" + rawPhone
+            : rawPhone;
     if (!phone) {
       setNotice("Add a phone number to this customer first.");
       return;
@@ -629,6 +650,7 @@ export default function App() {
     () =>
       leads
         .filter((lead) =>
+          lead.status !== "Converted" &&
           /^\d{4}-\d{2}-\d{2}$/.test(lead.followUpDate || "")
         )
         .sort((a, b) =>
@@ -645,6 +667,26 @@ export default function App() {
     (lead) => getFollowUpState(lead.followUpDate) === "Due today"
   ).length;
 
+  useEffect(() => {
+    if (
+      !remindersEnabled ||
+      !("Notification" in window) ||
+      Notification.permission !== "granted" ||
+      (todayCount === 0 && overdueCount === 0)
+    ) return;
+
+    const reminderKey = `followupflow-reminder-date-${today}`;
+
+    try {
+      if (localStorage.getItem(reminderKey) === "sent") return;
+      new Notification("FollowUpFlow reminder", {
+        body: `${todayCount} due today and ${overdueCount} overdue follow-up(s).`
+      });
+      localStorage.setItem(reminderKey, "sent");
+    } catch {
+      setNotice("A browser reminder could not be displayed.");
+    }
+  }, [remindersEnabled, todayCount, overdueCount, today]);
   const normalizedSearch = searchTerm.trim().toLowerCase();
 
   const baseVisibleLeads =
@@ -724,7 +766,16 @@ export default function App() {
   }
 
   function openLeadWhatsApp(lead) {
-    const phone = (lead.phone || "").replace(/\\D/g, "");
+    const rawPhone = (lead.phone || "").replace(/\D/g, "");
+    const phone = rawPhone.startsWith("00")
+      ? rawPhone.slice(2)
+      : rawPhone.startsWith("0")
+        ? "92" + rawPhone.slice(1)
+        : rawPhone.startsWith("92")
+          ? rawPhone
+          : rawPhone.length === 10 && rawPhone.startsWith("3")
+            ? "92" + rawPhone
+            : rawPhone;
     if (!phone) {
       setNotice("Add a phone number first.");
       return;
@@ -748,8 +799,13 @@ export default function App() {
       "Name", "Email", "Business", "Phone", "Status",
       "Follow-up Date", "Notes", "Deal Value", "Created At"
     ];
-    const cell = (value) =>
-      '"' + String(value == null ? "" : value).replace(/"/g, '""') + '"';
+    const cell = (value) => {
+      let text = String(value == null ? "" : value);
+      if (/^[\s]*[=+@]/.test(text) || /^[\s]*-/.test(text)) {
+        text = "'" + text;
+      }
+      return '"' + text.replace(/"/g, '""') + '"';
+    };
     const rows = leads.map((lead) => [
       lead.name, lead.email, lead.business, lead.phone, lead.status,
       lead.followUpDate, lead.notes, lead.dealValue, lead.createdAt
@@ -785,7 +841,7 @@ export default function App() {
 
           <p>
             {lead.business || "No company added"}
-            {lead.email ? ` · ${lead.email}` : ""}
+            {lead.email ? " | " + lead.email : ""}
           </p>
 
           <span className={getStatusClass(lead.status)}>
@@ -808,7 +864,7 @@ export default function App() {
               <ul>
                 {lead.activity.map((item) => (
                   <li key={item.id}>
-                    {item.message} — {new Date(item.at).toLocaleString()}
+                    {item.message} - {new Date(item.at).toLocaleString()}
                   </li>
                 ))}
               </ul>
@@ -910,7 +966,7 @@ export default function App() {
           aria-label={`Delete ${lead.name}`}
           title="Delete lead"
         >
-          ×
+          x
         </button>
       </article>
     );
@@ -935,9 +991,9 @@ export default function App() {
               }`}
               onClick={() => setActiveView(view)}
             >
-              {view === "Dashboard" && "▦"}
-              {view === "My Leads" && "♡"}
-              {view === "Follow-ups" && "✓"}
+              {view === "Dashboard" && "[D]"}
+              {view === "My Leads" && "[L]"}
+              {view === "Follow-ups" && "[F]"}
               &nbsp; {view}
             </button>
           ))}
@@ -975,7 +1031,7 @@ export default function App() {
               aria-label="Dismiss notification"
               onClick={() => setNotice("")}
             >
-              ×
+              x
             </button>
           </div>
         )}
@@ -1024,26 +1080,64 @@ export default function App() {
             </section>
 
             <section className="followup-summary">
-              <div>
-                <span>Overdue follow-ups</span>
-                <strong>{overdueCount}</strong>
-              </div>
-
-              <div>
-                <span>Due today</span>
-                <strong>{todayCount}</strong>
-              </div>
-
               <button
                 type="button"
                 onClick={() => setActiveView("Follow-ups")}
               >
-                View follow-ups →
+                View follow-ups
               </button>
             </section>
           </>
         )}
 
+        <section className="panel reminder-panel">
+          <h2>Browser Reminders</h2>
+          <p className="muted">
+            Get browser notifications for today's and overdue follow-ups.
+            Keep FollowUpFlow open for reminders to work.
+          </p>
+          <button
+            type="button"
+            onClick={async () => {
+              if (remindersEnabled) {
+                localStorage.setItem("followupflow-reminders-enabled", "false");
+                setRemindersEnabled(false);
+                setNotice("Reminders turned off.");
+                return;
+              }
+
+              if (!("Notification" in window)) {
+                setNotice("This browser does not support notifications. You can use calendar downloads instead.");
+                return;
+              }
+
+              if (Notification.permission === "denied") {
+                setNotice("Notifications are blocked. In Chrome, click the site icon beside the address bar, open Site settings, set Notifications to Allow, then reload this app.");
+                return;
+              }
+
+              try {
+                const permission = await Notification.requestPermission();
+                if (permission === "granted") {
+                  localStorage.setItem("followupflow-reminders-enabled", "true");
+                  setRemindersEnabled(true);
+                  setNotice("Reminders are on. Keep FollowUpFlow open.");
+                } else {
+                  localStorage.setItem("followupflow-reminders-enabled", "false");
+                  setRemindersEnabled(false);
+                  setNotice("Notifications were not allowed. Open this site's browser settings and allow Notifications.");
+                }
+              } catch {
+                setNotice("Could not enable notifications. Check this site's browser permissions.");
+              }
+            }}
+          >
+            {remindersEnabled ? "Reminders on — Turn off" : "Enable reminders"}
+          </button>
+          <p className="message-note">
+            Browser reminders are not guaranteed when the app or browser is closed.
+          </p>
+        </section>
         <section className="content-grid">
           {activeView !== "Follow-ups" && (
             <div className="panel" id="add-lead-panel">
@@ -1215,7 +1309,7 @@ export default function App() {
 
             {visibleLeads.length === 0 ? (
               <div className="empty">
-                <div className="empty-icon">◷</div>
+                <div className="empty-icon">*</div>
 
                 <h3>
                   {normalizedSearch || statusFilter !== "All"
@@ -1294,7 +1388,7 @@ export default function App() {
                 Create a personalized English message for your customer.
               </p>
             </div>
-            <span className="message-icon">✉</span>
+            <span className="message-icon">*</span>
           </div>
 
           <button
@@ -1368,7 +1462,7 @@ export default function App() {
                     {leads.map((lead) => (
                       <option key={lead.id} value={String(lead.id)}>
                         {lead.name}
-                        {lead.business ? ` — ${lead.business}` : ""}
+                        {lead.business ? " - " + lead.business : ""}
                       </option>
                     ))}
                   </select>
@@ -1481,7 +1575,7 @@ export default function App() {
               {selectedLead && (
                 <div className="selected-customer">
                   Selected customer: <strong>{selectedLead.name}</strong>
-                  {selectedLead.email ? ` · ${selectedLead.email}` : ""}
+                  {selectedLead.email ? " | " + selectedLead.email : ""}
                 </div>
               )}
 
@@ -1566,7 +1660,12 @@ export default function App() {
           )}
         </section>
 
-        <footer>FollowUpFlow · Never lose a lead again.</footer>
+        <footer>
+          <p>FollowUpFlow Â· Never lose a lead again.</p>
+          <p className="privacy-note">
+            Privacy: Your leads and settings are stored in this browser on this device. They are not synced to a cloud account. Clearing browser data may delete them, so export a CSV backup regularly.
+          </p>
+        </footer>
       </main>
 
       {editingLeadId !== null && (
@@ -1597,7 +1696,7 @@ export default function App() {
                 aria-label="Close edit form"
                 onClick={() => setEditingLeadId(null)}
               >
-                ×
+                x
               </button>
             </div>
 
@@ -1722,3 +1821,4 @@ export default function App() {
     </div>
   );
 }
+

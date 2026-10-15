@@ -1,114 +1,24 @@
-
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
-import { normalizePhone } from "./utils/phone";
+import { MESSAGE_TEMPLATES } from "./data/messageTemplates";
+import { formatDate, getToday, getWeekEnd } from "./utils/dates";
+import {
+  STATUSES,
+  STORAGE_KEY,
+  applyLeadChanges,
+  countDueToday,
+  countOverdue,
+  createLeadId,
+  getLeadFollowUpState,
+  getScheduledLeads,
+  loadLeads,
+} from "./utils/leads";
+import { isValidPhone } from "./utils/phone";
+import { loadTheme, safeSetItem, saveTheme } from "./utils/storage";
+import { buildWhatsAppUrl, getWhatsAppPhoneError } from "./utils/whatsapp";
 
-const STORAGE_KEY = "followupflow-leads";
-const STATUSES = ["New", "Contacted", "Interested", "Converted"];
-
-const MESSAGE_TEMPLATES = {
-  introduction: {
-    label: "First follow-up",
-    subject: "Following up on our conversation",
-    body: (name, business) =>
-      `Hi ${name},\n\nI hope you're doing well. I wanted to follow up on our recent conversation${business ? ` about ${business}` : ""}. Please let me know if you have any questions or if there is anything I can help you with.\n\nLooking forward to hearing from you!`,
-  },
-  interested: {
-    label: "Interested customer",
-    subject: "Checking in",
-    body: (name, business) =>
-      `Hi ${name},\n\nThank you for your interest${business ? ` in ${business}` : ""}. I wanted to check in and see if you'd like any additional information. I'm happy to answer your questions and help you decide on the next steps.\n\nHope to hear from you soon!`,
-  },
-  quote: {
-    label: "Quote or proposal",
-    subject: "Following up on your quote",
-    body: (name, business) =>
-      `Hi ${name},\n\nI'm following up on the quote or proposal I shared${business ? ` regarding ${business}` : ""}. Have you had a chance to review it? Please let me know if you'd like any changes or have questions.\n\nThank you for your time!`,
-  },
-  reminder: {
-    label: "Polite reminder",
-    subject: "A quick follow-up",
-    body: (name, business) =>
-      `Hi ${name},\n\nI hope all is well. This is a friendly follow-up${business ? ` about ${business}` : ""}. When you have a moment, please let me know if there are any updates or if I can provide anything else.\n\nThanks, and have a great day!`,
-  },
-  closing: {
-    label: "Closing the conversation",
-    subject: "Checking in one last time",
-    body: (name, business) =>
-      `Hi ${name},\n\nI'm checking in one last time${business ? ` about ${business}` : ""}. I understand the timing may not be right, so there's no pressure. If you'd like to reconnect in the future, I'll be happy to help.\n\nWishing you all the best!`,
-  },
-};
-
-function getToday() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getFollowUpState(date) {
-  if (!date) return "Not scheduled";
-  const today = getToday();
-  if (date < today) return "Overdue";
-  if (date === today) return "Due today";
-  return "Upcoming";
-}
-
-function formatDate(date) {
-  if (!date) return "Not scheduled";
-  const parsed = new Date(`${date}T12:00:00`);
-  if (Number.isNaN(parsed.getTime())) return date;
-
-  return parsed.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function loadLeads() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return [];
-
-    const parsed = JSON.parse(saved);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .filter(
-        (lead) =>
-          lead && lead.id != null && typeof lead.name === "string"
-      )
-      .map((lead) => ({
-        id: lead.id,
-        name: lead.name || "",
-        email: lead.email || "",
-        business: lead.business || "",
-        phone: lead.phone || "",
-        notes: lead.notes || "",
-        dealValue: Number(lead.dealValue) || 0,
-        activity: Array.isArray(lead.activity) ? lead.activity : [],
-        status: STATUSES.includes(lead.status) ? lead.status : "New",
-        followUpDate:
-          lead.status === "Converted"
-            ? ""
-            : typeof lead.followUpDate === "string"
-              ? lead.followUpDate
-              : "",
-        createdAt: lead.createdAt || new Date().toISOString(),
-      }));
-  } catch {
-    return [];
-  }
-}
-
-function createLeadId() {
-  return (
-    globalThis.crypto?.randomUUID?.() ||
-    `${Date.now()}-${Math.random().toString(36).slice(2)}`
-  );
-}
+const INVALID_PHONE_NOTICE =
+  "Please enter a valid phone number (8-15 digits, for example +92 300 1234567) or leave it blank.";
 
 function getStatusClass(status) {
   return `status status-${String(status || "new").toLowerCase()}`;
@@ -120,28 +30,15 @@ function getFollowUpClass(state) {
     .replaceAll(" ", "-")}`;
 }
 
-function getWeekEnd() {
-  const date = new Date(`${getToday()}T12:00:00`);
-  const day = date.getDay();
-  const daysUntilSunday = day === 0 ? 0 : 7 - day;
-  date.setDate(date.getDate() + daysUntilSunday);
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const dayOfMonth = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${dayOfMonth}`;
-}
-
 export default function App() {
   const [leads, setLeads] = useState(loadLeads);
-  const [darkMode, setDarkMode] = useState(
-    () => localStorage.getItem("followupflow-theme") === "dark"
-  );
+  const [darkMode, setDarkMode] = useState(() => loadTheme() === "dark");
 
   useEffect(() => {
-    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
-    localStorage.setItem("followupflow-theme", darkMode ? "dark" : "light");
+    const theme = darkMode ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    // Saving can fail (blocked or full storage); the theme still applies for this session.
+    saveTheme(theme);
   }, [darkMode]);
   const [today, setToday] = useState(getToday);
 
@@ -278,6 +175,11 @@ export default function App() {
       return;
     }
 
+    if (phone.trim() && !isValidPhone(phone.trim())) {
+      setNotice(INVALID_PHONE_NOTICE);
+      return;
+    }
+
     const newLead = {
       id: createLeadId(),
       name: cleanName,
@@ -292,7 +194,7 @@ export default function App() {
         at: new Date().toISOString(),
       }],
       status,
-      followUpDate,
+      followUpDate: status === "Converted" ? "" : followUpDate,
       createdAt: new Date().toISOString(),
     };
 
@@ -310,40 +212,9 @@ export default function App() {
 
   function updateLead(id, changes) {
     setLeads((current) =>
-      current.map((lead) => {
-        if (String(lead.id) !== String(id)) return lead;
-
-        const labels = {
-          status: "Status updated",
-          followUpDate: "Follow-up date updated",
-          name: "Customer name updated",
-          email: "Email updated",
-          business: "Business updated",
-          phone: "Phone updated",
-          notes: "Notes updated",
-          dealValue: "Deal value updated",
-          lastFollowUpCompletedAt: "Follow-up marked done",
-        };
-
-        const effectiveChanges = changes.status === "Converted"
-          ? { ...changes, followUpDate: "" }
-          : changes;
-
-        const changed = Object.keys(effectiveChanges).filter(
-          (key) => lead[key] !== effectiveChanges[key]
-        );
-        const entries = changed.map((key) => ({
-          id: createLeadId(),
-          message: key === "status" ? ("Status changed from " + lead.status + " to " + effectiveChanges.status) : (labels[key] || (key + " updated")),
-          at: new Date().toISOString(),
-        }));
-
-        return {
-          ...lead,
-          ...effectiveChanges,
-          activity: [...entries, ...(lead.activity || [])].slice(0, 30),
-        };
-      })
+      current.map((lead) =>
+        String(lead.id) === String(id) ? applyLeadChanges(lead, changes) : lead
+      )
     );
   }
 
@@ -353,6 +224,11 @@ export default function App() {
   }
 
   function handleFollowUpChange(lead, nextDate) {
+    if (lead.status === "Converted") {
+      setNotice("Converted leads don't need follow-ups.");
+      return;
+    }
+
     updateLead(lead.id, { followUpDate: nextDate });
     setNotice(`Follow-up date updated for ${lead.name}.`);
   }
@@ -405,6 +281,11 @@ export default function App() {
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
     ) {
       setNotice("Please enter a valid email address or leave it blank.");
+      return;
+    }
+
+    if (editForm.phone.trim() && !isValidPhone(editForm.phone.trim())) {
+      setNotice(INVALID_PHONE_NOTICE);
       return;
     }
 
@@ -600,26 +481,22 @@ export default function App() {
 
   function openMessageWhatsApp() {
     if (!generatedMessage.trim()) return;
-    const rawPhone = String(selectedLead?.phone ?? "").trim();
-    const phone = normalizePhone(rawPhone);
-    if (!phone) {
-      setNotice(
-        rawPhone
-          ? "Enter a valid phone number with 8-15 digits."
-          : "Add a phone number to this customer first."
-      );
-      return;
-    }
-
     const parts = generatedMessage.split("\n\n");
     parts.shift();
     const body = parts.join("\n\n");
 
-    window.open(
-      "https://wa.me/" + phone + "?text=" + encodeURIComponent(body),
-      "_blank",
-      "noopener,noreferrer"
-    );
+    const url = buildWhatsAppUrl(selectedLead?.phone, body);
+    if (!url) {
+      setNotice(
+        getWhatsAppPhoneError(
+          selectedLead?.phone,
+          "Add a phone number to this customer first."
+        )
+      );
+      return;
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   async function copyMessage() {
@@ -645,26 +522,11 @@ export default function App() {
     (lead) => lead.status === "Converted"
   ).length;
 
-  const scheduledLeads = useMemo(
-    () =>
-      leads
-        .filter((lead) =>
-          lead.status !== "Converted" &&
-          /^\d{4}-\d{2}-\d{2}$/.test(lead.followUpDate || "")
-        )
-        .sort((a, b) =>
-          a.followUpDate.localeCompare(b.followUpDate)
-        ),
-    [leads]
-  );
+  const scheduledLeads = useMemo(() => getScheduledLeads(leads), [leads]);
 
-  const overdueCount = scheduledLeads.filter(
-    (lead) => getFollowUpState(lead.followUpDate) === "Overdue"
-  ).length;
+  const overdueCount = countOverdue(scheduledLeads);
 
-  const todayCount = scheduledLeads.filter(
-    (lead) => getFollowUpState(lead.followUpDate) === "Due today"
-  ).length;
+  const todayCount = countDueToday(scheduledLeads);
 
   useEffect(() => {
     if (
@@ -765,24 +627,18 @@ export default function App() {
   }
 
   function openLeadWhatsApp(lead) {
-    const rawPhone = String(lead.phone ?? "").trim();
-    const phone = normalizePhone(rawPhone);
-    if (!phone) {
-      setNotice(
-        rawPhone
-          ? "Enter a valid phone number with 8-15 digits."
-          : "Add a phone number first."
-      );
-      return;
-    }
     const template =
       MESSAGE_TEMPLATES[messageType] || MESSAGE_TEMPLATES.introduction;
-    const message = template.body(lead.name, lead.business);
-    window.open(
-      "https://wa.me/" + phone + "?text=" + encodeURIComponent(message),
-      "_blank",
-      "noopener,noreferrer"
+    const url = buildWhatsAppUrl(
+      lead.phone,
+      template.body(lead.name, lead.business)
     );
+    if (!url) {
+      setNotice(getWhatsAppPhoneError(lead.phone));
+      return;
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   function exportLeadsCSV() {
@@ -823,7 +679,7 @@ export default function App() {
   }
 
   function renderLead(lead) {
-    const followUpState = getFollowUpState(lead.followUpDate);
+    const followUpState = getLeadFollowUpState(lead);
 
     return (
       <article className="lead" key={lead.id}>
@@ -1095,7 +951,7 @@ export default function App() {
             type="button"
             onClick={async () => {
               if (remindersEnabled) {
-                localStorage.setItem("followupflow-reminders-enabled", "false");
+                safeSetItem("followupflow-reminders-enabled", "false");
                 setRemindersEnabled(false);
                 setNotice("Reminders turned off.");
                 return;
@@ -1114,11 +970,11 @@ export default function App() {
               try {
                 const permission = await Notification.requestPermission();
                 if (permission === "granted") {
-                  localStorage.setItem("followupflow-reminders-enabled", "true");
+                  safeSetItem("followupflow-reminders-enabled", "true");
                   setRemindersEnabled(true);
                   setNotice("Reminders are on. Keep FollowUpFlow open.");
                 } else {
-                  localStorage.setItem("followupflow-reminders-enabled", "false");
+                  safeSetItem("followupflow-reminders-enabled", "false");
                   setRemindersEnabled(false);
                   setNotice("Notifications were not allowed. Open this site's browser settings and allow Notifications.");
                 }

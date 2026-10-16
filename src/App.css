@@ -1369,3 +1369,64 @@ textarea:focus {
 :root[data-theme="dark"] .selected-customer strong {
   color: #f3f4f6;
 }
+
+/* Activity history on lead cards */
+.lead-activity {
+  margin: 8px 0 0;
+}
+
+.lead-activity summary {
+  display: inline-block;
+  color: #2867d8;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.lead-activity summary::-webkit-details-marker {
+  display: none;
+}
+
+.lead-activity summary::before {
+  content: "\25B8";
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.lead-activity[open] summary::before {
+  content: "\25BE";
+}
+
+.lead-activity ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lead-activity li {
+  padding: 6px 0;
+  border-top: 1px solid #e5eaf2;
+  color: #66768a;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+:root[data-theme="dark"] .lead-activity summary {
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"] .lead-activity li {
+  border-top-color: #374151;
+  color: #aab7c8;
+}
+
+/* Search and filter labels stay readable in dark mode */
+:root[data-theme="dark"] .lead-filters label {
+  color: #cbd5e1;
+}
+
+/* Breathing room between the settings card and the customer/purpose row */
+.message-controls {
+  margin-top: 20px;
+}

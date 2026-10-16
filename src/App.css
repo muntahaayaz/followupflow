@@ -1180,3 +1180,101 @@ footer {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Textareas share the look of inputs and selects */
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  padding: 11px;
+  border: 1px solid #dfe5ed;
+  border-radius: 8px;
+  background: white;
+  color: #192a3a;
+  resize: vertical;
+}
+
+textarea:focus {
+  border-color: #3978ed;
+}
+
+/* Secondary buttons that previously fell back to the browser's default look */
+.followup-actions button,
+.export-csv-button,
+.secondary-button {
+  padding: 8px 10px;
+  border: 1px solid #dfe5ed;
+  border-radius: 7px;
+  background: white;
+  color: #2867d8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.followup-actions button:hover:not(:disabled),
+.export-csv-button:hover:not(:disabled),
+.secondary-button:hover:not(:disabled) {
+  background: #edf4ff;
+}
+
+:root[data-theme="dark"] .followup-actions button,
+:root[data-theme="dark"] .export-csv-button,
+:root[data-theme="dark"] .secondary-button {
+  background: #263449;
+  color: #93c5fd;
+  border-color: #4b5563;
+}
+
+:root[data-theme="dark"] .followup-actions button:hover:not(:disabled),
+:root[data-theme="dark"] .export-csv-button:hover:not(:disabled),
+:root[data-theme="dark"] .secondary-button:hover:not(:disabled) {
+  background: #2f405a;
+}
+
+/* Business settings and custom template labels match the rest of the app's forms */
+.message-settings label {
+  display: block;
+  margin: 14px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.message-settings label > input,
+.message-settings label > select,
+.message-settings label > textarea {
+  margin-top: 7px;
+}
+
+/* Dark theme variants for elements that stayed light */
+:root[data-theme="dark"] .followup-summary {
+  background: #1f2937;
+  border-color: #374151;
+}
+
+:root[data-theme="dark"] .generate-for-lead,
+:root[data-theme="dark"] .edit-button {
+  background: #263449;
+  color: #93c5fd;
+  border-color: #4b5563;
+}
+
+:root[data-theme="dark"] .generate-for-lead:hover,
+:root[data-theme="dark"] .edit-button:hover {
+  background: #2f405a;
+}
+
+/* Dark theme: message generator labels and secondary buttons */
+:root[data-theme="dark"] .message-controls label,
+:root[data-theme="dark"] .generated-label {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .secondary-message-button {
+  background: #263449;
+  color: #e5eaf2;
+  border-color: #4b5563;
+}
+
+:root[data-theme="dark"] .secondary-message-button:hover:not(:disabled) {
+  background: #2f405a;
+}

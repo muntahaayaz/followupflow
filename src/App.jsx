@@ -949,6 +949,7 @@ export default function App() {
           </p>
           <button
             type="button"
+            className="secondary-button"
             onClick={async () => {
               if (remindersEnabled) {
                 safeSetItem("followupflow-reminders-enabled", "false");
@@ -1411,6 +1412,7 @@ export default function App() {
                 {editingTemplateId && (
                   <button
                     type="button"
+                    className="secondary-button"
                     onClick={() => {
                       setEditingTemplateId(null);
                       setCustomTemplateName("");
@@ -1512,7 +1514,7 @@ export default function App() {
         </section>
 
         <footer>
-          <p>FollowUpFlow Â· Never lose a lead again.</p>
+          <p>FollowUpFlow · Never lose a lead again.</p>
           <p className="privacy-note">
             Privacy: Your leads and settings are stored in this browser on this device. They are not synced to a cloud account. Clearing browser data may delete them, so export a CSV backup regularly.
           </p>

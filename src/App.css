@@ -1278,3 +1278,94 @@ textarea:focus {
 :root[data-theme="dark"] .secondary-message-button:hover:not(:disabled) {
   background: #2f405a;
 }
+
+/* Message generator: grouped settings cards and a clear primary action */
+.message-settings {
+  margin-top: 20px;
+  padding: 18px 18px 20px;
+  border: 1px solid #e5eaf2;
+  border-radius: 12px;
+  background: #fafbfd;
+}
+
+.message-settings h3 {
+  margin: 0 0 4px;
+  color: #192a3a;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.save-template-button {
+  display: block;
+  width: 100%;
+  margin-top: 18px;
+  border: 1px solid #3978ed;
+  background: white;
+  color: #2867d8;
+}
+
+.save-template-button:hover {
+  background: #edf4ff;
+}
+
+.message-settings > .secondary-button {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.generate-message-button {
+  display: block;
+  width: 100%;
+  margin-top: 20px;
+  padding: 14px 16px;
+  font-size: 14px;
+}
+
+.generate-message-button:disabled {
+  background: #cbd5e1;
+  color: #64748b;
+  opacity: 1;
+}
+
+.generate-message-button + .field-hint {
+  margin-top: 10px;
+  text-align: center;
+}
+
+:root[data-theme="dark"] .message-settings {
+  background: #1b2433;
+  border-color: #374151;
+}
+
+:root[data-theme="dark"] .message-settings h3 {
+  color: #f3f4f6;
+}
+
+:root[data-theme="dark"] .save-template-button {
+  background: transparent;
+  color: #93c5fd;
+  border-color: #3978ed;
+}
+
+:root[data-theme="dark"] .save-template-button:hover {
+  background: #263449;
+}
+
+:root[data-theme="dark"] .generate-message-button:disabled {
+  background: #2b3648;
+  color: #7c8aa0;
+}
+
+.selected-customer {
+  margin-top: 16px;
+}
+
+:root[data-theme="dark"] .selected-customer {
+  background: #1b2433;
+  color: #aab7c8;
+}
+
+:root[data-theme="dark"] .selected-customer strong {
+  color: #f3f4f6;
+}

@@ -1375,7 +1375,7 @@ export default function App() {
                 </label>
                 <button
                   type="button"
-                  className="generate-button"
+                  className="generate-button save-template-button"
                   onClick={saveCustomTemplate}
                 >
                   {editingTemplateId ? "Save changes" : "Save custom template"}
@@ -1434,12 +1434,17 @@ export default function App() {
 
               <button
                 type="button"
-                className="generate-button"
+                className="generate-button generate-message-button"
                 onClick={generateMessage}
                 disabled={!selectedLead}
               >
                 Generate message
               </button>
+              {!selectedLead && (
+                <p className="field-hint">
+                  Choose a customer above to generate a message.
+                </p>
+              )}
 
               <label
                 className="generated-label"

@@ -190,3 +190,20 @@ describe("WhatsApp links and phone validation", () => {
     expect(saved[0].phone).toBe("+44 (0)20 7946 0958");
   });
 });
+
+describe("message generator", () => {
+  it("explains why Generate is disabled until a customer is chosen", () => {
+    seed([lead()]);
+    render(<App />);
+    const generate = screen.getByRole("button", { name: "Generate message" });
+    expect(generate.disabled).toBe(true);
+    expect(screen.getByText("Choose a customer above to generate a message.")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/choose customer/i), {
+      target: { value: "lead-1" },
+    });
+
+    expect(generate.disabled).toBe(false);
+    expect(screen.queryByText("Choose a customer above to generate a message.")).toBeNull();
+  });
+});

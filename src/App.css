@@ -1430,3 +1430,11 @@ textarea:focus {
 .message-controls {
   margin-top: 20px;
 }
+
+/* Export and import buttons sit side by side */
+.csv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}

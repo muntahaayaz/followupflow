@@ -1,6 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { MESSAGE_TEMPLATES } from "./data/messageTemplates";
+import {
+  MAX_IMPORT_BYTES,
+  importLeadsFromCsv,
+  leadsToCsv,
+  summarizeImport,
+} from "./utils/csv";
 import { formatDate, getToday, getWeekEnd } from "./utils/dates";
 import {
   STATUSES,
@@ -97,6 +103,7 @@ export default function App() {
 
   const [storageWarning, setStorageWarning] = useState("");
   const [notice, setNotice] = useState("");
+  const importInputRef = useRef(null);
   const [remindersEnabled, setRemindersEnabled] = useState(() => {
     try {
       return localStorage.getItem("followupflow-reminders-enabled") === "true" &&
@@ -646,24 +653,7 @@ export default function App() {
       setNotice("There are no leads to export yet.");
       return;
     }
-    const columns = [
-      "Name", "Email", "Business", "Phone", "Status",
-      "Follow-up Date", "Notes", "Deal Value", "Created At"
-    ];
-    const cell = (value) => {
-      let text = String(value == null ? "" : value);
-      if (/^[\s]*[=+@]/.test(text) || /^[\s]*-/.test(text)) {
-        text = "'" + text;
-      }
-      return '"' + text.replace(/"/g, '""') + '"';
-    };
-    const rows = leads.map((lead) => [
-      lead.name, lead.email, lead.business, lead.phone, lead.status,
-      lead.followUpDate, lead.notes, lead.dealValue, lead.createdAt
-    ]);
-    const csv = [columns, ...rows]
-      .map((row) => row.map(cell).join(","))
-      .join("\r\n");
+    const csv = leadsToCsv(leads);
     const blob = new Blob(["\uFEFF" + csv], {
       type: "text/csv;charset=utf-8;"
     });
@@ -676,6 +666,37 @@ export default function App() {
     link.remove();
     URL.revokeObjectURL(url);
     setNotice("CSV export downloaded.");
+  }
+
+  function handleImportFile(event) {
+    const input = event.target;
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    if (file.size > MAX_IMPORT_BYTES) {
+      setNotice("That file is too large to import (the limit is 2 MB).");
+      input.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = importLeadsFromCsv(String(reader.result ?? ""), leads);
+      if (result.error) {
+        setNotice(result.error);
+      } else {
+        if (result.leads.length > 0) {
+          setLeads((current) => [...result.leads, ...current]);
+        }
+        setNotice(summarizeImport(result));
+      }
+      input.value = "";
+    };
+    reader.onerror = () => {
+      setNotice("The file could not be read.");
+      input.value = "";
+    };
+    reader.readAsText(file);
   }
 
   function renderLead(lead) {
@@ -1243,13 +1264,32 @@ export default function App() {
             <span className="message-icon">*</span>
           </div>
 
-          <button
-            type="button"
-            onClick={exportLeadsCSV}
-            className="export-csv-button"
-          >
-            Export leads CSV
-          </button>
+          <div className="csv-actions">
+            <button
+              type="button"
+              onClick={exportLeadsCSV}
+              className="export-csv-button"
+            >
+              Export leads CSV
+            </button>
+
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              className="export-csv-button"
+            >
+              Import leads CSV
+            </button>
+
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              aria-label="Choose a CSV file to import"
+              onChange={handleImportFile}
+              hidden
+            />
+          </div>
 
           {leads.length === 0 ? (
             <div className="empty">

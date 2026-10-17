@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.jsx";
+import { leadsToCsv } from "./utils/csv";
 
 const lead = (overrides = {}) => ({
   id: "lead-1",
@@ -205,5 +206,100 @@ describe("message generator", () => {
 
     expect(generate.disabled).toBe(false);
     expect(screen.queryByText("Choose a customer above to generate a message.")).toBeNull();
+  });
+});
+
+describe("CSV import and export", () => {
+  const csvFile = (text, name = "leads.csv") => new File([text], name, { type: "text/csv" });
+  const fileInput = (container) => container.querySelector('input[type="file"]');
+  const choose = (container, file) =>
+    fireEvent.change(fileInput(container), { target: { files: [file] } });
+  const savedLeads = () => JSON.parse(localStorage.getItem("followupflow-leads") || "[]");
+  const backup = leadsToCsv([
+    lead({ id: "a", name: "Ada Lovelace", email: "ada@example.com", phone: "+92 300 1234567", status: "Interested", followUpDate: "2026-12-01" }),
+    lead({ id: "b", name: "Grace Hopper", status: "Converted" }),
+  ]);
+
+  it("opens the file picker from the Import button", () => {
+    const { container } = render(<App />);
+    const click = vi.spyOn(fileInput(container), "click").mockImplementation(() => {});
+    fireEvent.click(screen.getByRole("button", { name: "Import leads CSV" }));
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores leads from a backup into an empty app", async () => {
+    const { container } = render(<App />);
+    choose(container, csvFile(backup));
+
+    expect(await screen.findByText("Imported 2 leads.")).toBeTruthy();
+    const saved = savedLeads();
+    expect(saved.map((item) => item.name).sort()).toEqual(["Ada Lovelace", "Grace Hopper"]);
+    expect(saved.find((item) => item.name === "Ada Lovelace")).toMatchObject({
+      phone: "+92 300 1234567",
+      status: "Interested",
+      followUpDate: "2026-12-01",
+    });
+    expect(screen.getByText("Total leads").parentElement.querySelector("strong").textContent).toBe("2");
+  });
+
+  it("keeps existing leads and skips duplicates when the same file is imported again", async () => {
+    seed([lead({ id: "keep", name: "Existing Person" })]);
+    const { container } = render(<App />);
+
+    choose(container, csvFile(backup));
+    expect(await screen.findByText("Imported 2 leads.")).toBeTruthy();
+    expect(savedLeads()).toHaveLength(3);
+
+    choose(container, csvFile(backup));
+    expect(await screen.findByText("No new leads were imported. Skipped 2 duplicates.")).toBeTruthy();
+    expect(savedLeads()).toHaveLength(3);
+    expect(savedLeads().some((item) => item.id === "keep")).toBe(true);
+  });
+
+  it("rejects a file without a Name column and changes nothing", async () => {
+    const { container } = render(<App />);
+    choose(container, csvFile("Email,Phone\nx@example.com,123"));
+
+    expect(await screen.findByText(/Name column is missing/)).toBeTruthy();
+    expect(savedLeads()).toHaveLength(0);
+  });
+
+  it("rejects files over the size limit without reading them", () => {
+    const { container } = render(<App />);
+    const big = csvFile("Name\nA");
+    Object.defineProperty(big, "size", { value: 3 * 1024 * 1024 });
+    choose(container, big);
+
+    expect(screen.getByText(/too large to import/)).toBeTruthy();
+    expect(savedLeads()).toHaveLength(0);
+  });
+
+  it("still exports a CSV that matches the shared serializer, with a BOM", async () => {
+    const leads = [lead({ name: "Ada Lovelace", phone: "+92 300 1234567" })];
+    seed(leads);
+    let exported;
+    URL.createObjectURL = vi.fn((blob) => {
+      exported = blob;
+      return "blob:test";
+    });
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Export leads CSV" }));
+
+    expect(await screen.findByText("CSV export downloaded.")).toBeTruthy();
+    // Read raw bytes: readAsText would silently strip the BOM we want to check.
+    const bytes = new Uint8Array(
+      await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsArrayBuffer(exported);
+      })
+    );
+    expect(Array.from(bytes.slice(0, 3))).toEqual([0xef, 0xbb, 0xbf]);
+    const text = new TextDecoder().decode(bytes.slice(3));
+    expect(text).toBe(leadsToCsv(JSON.parse(localStorage.getItem("followupflow-leads"))));
+    expect(text).toContain("'+92 300 1234567");
   });
 });

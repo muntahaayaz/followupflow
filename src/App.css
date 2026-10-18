@@ -1438,3 +1438,44 @@ textarea:focus {
   justify-content: center;
   gap: 10px;
 }
+
+/* Icons replace the old "*" placeholders */
+.message-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+}
+
+.empty-icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+:root[data-theme="dark"] .message-icon {
+  background: #263449;
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"] .empty-icon {
+  color: #6b7f9e;
+}
+
+/* "View follow-ups" follows the dark theme */
+:root[data-theme="dark"] .followup-summary button {
+  background: #263449;
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"] .followup-summary button:hover {
+  background: #2f405a;
+}
+
+/* Follow-up block lines up with the centered lead card */
+.followup-date {
+  align-items: center;
+  text-align: center;
+}

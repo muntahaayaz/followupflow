@@ -255,6 +255,17 @@ export default function App() {
     }
   }
 
+  useEffect(() => {
+    if (editingLeadId === null) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setEditingLeadId(null);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editingLeadId]);
+
   function startEditing(lead) {
     setEditingLeadId(lead.id);
 
@@ -441,13 +452,16 @@ export default function App() {
       MESSAGE_TEMPLATES[messageType] ||
       MESSAGE_TEMPLATES.introduction;
 
+    const fillPlaceholders = (text) =>
+      String(text ?? "")
+        .replace(/\{name\}/g, selectedLead.name || "")
+        .replace(/\{business\}/g, selectedLead.business || "")
+        .replace(/\{senderName\}/g, messageSettings.senderName || "")
+        .replace(/\{senderBusiness\}/g, messageSettings.senderBusiness || "");
+
     let body = typeof template.body === "function"
       ? template.body(selectedLead.name, selectedLead.business)
-      : template.body
-          .replace(/\{name\}/g, selectedLead.name || "")
-          .replace(/\{business\}/g, selectedLead.business || "")
-          .replace(/\{senderName\}/g, messageSettings.senderName || "")
-          .replace(/\{senderBusiness\}/g, messageSettings.senderBusiness || "");
+      : fillPlaceholders(template.body);
 
     if (messageTone === "Formal") {
       body = body.replace(/^Hi\b/gm, "Dear");
@@ -467,7 +481,7 @@ export default function App() {
     }
 
     setGeneratedMessage(
-      `Subject: ${template.subject}\n\n${body}`
+      `Subject: ${fillPlaceholders(template.subject)}\n\n${body}`
     );
     setCopyStatus("");
   }

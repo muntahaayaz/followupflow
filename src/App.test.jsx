@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.jsx";
 import { leadsToCsv } from "./utils/csv";
@@ -232,6 +232,7 @@ describe("CSV import and export", () => {
     choose(container, csvFile(backup));
 
     expect(await screen.findByText("Imported 2 leads.")).toBeTruthy();
+    await waitFor(() => expect(savedLeads()).toHaveLength(2));
     const saved = savedLeads();
     expect(saved.map((item) => item.name).sort()).toEqual(["Ada Lovelace", "Grace Hopper"]);
     expect(saved.find((item) => item.name === "Ada Lovelace")).toMatchObject({
@@ -239,7 +240,9 @@ describe("CSV import and export", () => {
       status: "Interested",
       followUpDate: "2026-12-01",
     });
-    expect(screen.getByText("Total leads").parentElement.querySelector("strong").textContent).toBe("2");
+    await waitFor(() =>
+      expect(screen.getByText("Total leads").parentElement.querySelector("strong").textContent).toBe("2")
+    );
   });
 
   it("keeps existing leads and skips duplicates when the same file is imported again", async () => {
@@ -248,11 +251,11 @@ describe("CSV import and export", () => {
 
     choose(container, csvFile(backup));
     expect(await screen.findByText("Imported 2 leads.")).toBeTruthy();
-    expect(savedLeads()).toHaveLength(3);
+    await waitFor(() => expect(savedLeads()).toHaveLength(3));
 
     choose(container, csvFile(backup));
     expect(await screen.findByText("No new leads were imported. Skipped 2 duplicates.")).toBeTruthy();
-    expect(savedLeads()).toHaveLength(3);
+    await waitFor(() => expect(savedLeads()).toHaveLength(3));
     expect(savedLeads().some((item) => item.id === "keep")).toBe(true);
   });
 
@@ -301,5 +304,42 @@ describe("CSV import and export", () => {
     const text = new TextDecoder().decode(bytes.slice(3));
     expect(text).toBe(leadsToCsv(JSON.parse(localStorage.getItem("followupflow-leads"))));
     expect(text).toContain("'+92 300 1234567");
+  });
+});
+
+describe("custom templates and the edit dialog", () => {
+  it("fills {name} and {business} in a custom template's subject as well as its body", () => {
+    seed([lead({ name: "Ada Lovelace", business: "Analytical Engines" })]);
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText(/template name/i), { target: { value: "Thanks note" } });
+    fireEvent.change(screen.getByLabelText(/email subject/i), { target: { value: "Thanks {name} from {business}" } });
+    fireEvent.change(screen.getByLabelText(/message body/i), { target: { value: "Hi {name}, thanks for visiting {business}." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save custom template" }));
+
+    fireEvent.change(screen.getByLabelText(/choose customer/i), { target: { value: "lead-1" } });
+    const purpose = screen.getByRole("option", { name: /Thanks note/ }).value;
+    fireEvent.change(screen.getByLabelText(/message purpose/i), { target: { value: purpose } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate message" }));
+
+    const message = screen.getByLabelText(/your message/i).value;
+    expect(message).toContain("Subject: Thanks Ada Lovelace from Analytical Engines");
+    expect(message).toContain("Hi Ada Lovelace, thanks for visiting Analytical Engines.");
+    expect(message).not.toMatch(/\{(name|business)\}/);
+  });
+
+  it("closes the edit dialog with the Escape key without saving", () => {
+    seed([lead()]);
+    render(<App />);
+    goTo("My Leads");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit lead" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.change(document.getElementById("edit-name"), { target: { value: "Changed" } });
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(JSON.parse(localStorage.getItem("followupflow-leads"))[0].name).toBe("Ada Lovelace");
   });
 });
